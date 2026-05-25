@@ -4,8 +4,10 @@ namespace App\Domain\Canonical;
 
 use App\Models\CanonicalProduct;
 use App\Models\Product;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 /**
  * Apply a batch of canonical groupings to the database.
@@ -38,9 +40,10 @@ class BulkUpsertCanonicalProducts
         $created = 0;
         $updated = 0;
         $productsAssigned = 0;
+        $duplicateBrandSkipped = 0;
         $errors = [];
 
-        DB::transaction(function () use ($groupings, &$created, &$updated, &$productsAssigned, &$errors): void {
+        DB::transaction(function () use ($groupings, &$created, &$updated, &$productsAssigned, &$duplicateBrandSkipped, &$errors): void {
             /** @var array<int, CanonicalProduct> $touched */
             $touched = [];
 
@@ -53,6 +56,7 @@ class BulkUpsertCanonicalProducts
                     canonical: $canonical,
                     groupingIndex: $i,
                     productsAssigned: $productsAssigned,
+                    duplicateBrandSkipped: $duplicateBrandSkipped,
                     errors: $errors,
                     touched: $touched,
                 );
@@ -68,6 +72,7 @@ class BulkUpsertCanonicalProducts
             updated: $updated,
             productsAssigned: $productsAssigned,
             errors: $errors,
+            duplicateBrandSkipped: $duplicateBrandSkipped,
         );
     }
 
@@ -132,6 +137,7 @@ class BulkUpsertCanonicalProducts
         CanonicalProduct $canonical,
         int $groupingIndex,
         int &$productsAssigned,
+        int &$duplicateBrandSkipped,
         array &$errors,
         array &$touched,
     ): void {
@@ -175,11 +181,12 @@ class BulkUpsertCanonicalProducts
             // If the product was previously assigned to a *different*
             // canonical, the old canonical's counts will be stale after
             // this. Touch it so the aggregate refresh covers it too.
-            if (
-                $product->canonical_product_id !== null
+            $previousCanonicalId = $product->canonical_product_id !== null
                 && (int) $product->canonical_product_id !== $canonical->id
-            ) {
-                $previous = CanonicalProduct::find($product->canonical_product_id);
+                ? (int) $product->canonical_product_id
+                : null;
+            if ($previousCanonicalId !== null) {
+                $previous = CanonicalProduct::find($previousCanonicalId);
                 if ($previous !== null) {
                     $touched[$previous->id] = $previous;
                 }
@@ -189,7 +196,43 @@ class BulkUpsertCanonicalProducts
             $product->canonical_match_confidence = $newConfidence;
             $product->canonical_match_method = $member['match_method'];
             $product->canonical_matched_at = Carbon::now();
-            $product->save();
+
+            // Phase 2.1 guardrail: the partial unique index
+            // ``products_canonical_brand_unique`` rejects a second
+            // product from the same brand against the same canonical.
+            // Wrap the save in a savepoint so a violation doesn't
+            // poison the outer transaction — we log, skip the loser,
+            // and keep processing the rest of the batch.
+            try {
+                DB::transaction(function () use ($product): void {
+                    $product->save();
+                });
+            } catch (UniqueConstraintViolationException $e) {
+                // The model state was mutated in-memory before the
+                // save attempt; refresh so callers (and tests) see
+                // the pre-save state.
+                $product->refresh();
+
+                $winner = Product::query()
+                    ->where('canonical_product_id', $canonical->id)
+                    ->where('brand_id', $product->brand_id)
+                    ->whereKeyNot($product->id)
+                    ->first();
+
+                Log::warning('canonical_bulk_upsert.duplicate_brand_skipped', [
+                    'canonical_id' => $canonical->id,
+                    'canonical_key' => $canonical->canonical_key,
+                    'brand_id' => $product->brand_id,
+                    'skipped_product_id' => $product->id,
+                    'existing_product_id' => $winner?->id,
+                    'grouping_index' => $groupingIndex,
+                    'member_index' => $j,
+                ]);
+
+                $duplicateBrandSkipped++;
+
+                continue;
+            }
 
             $productsAssigned++;
         }
