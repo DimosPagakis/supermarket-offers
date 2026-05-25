@@ -1,8 +1,16 @@
-"""Phase-1 batch canonicalisation driver.
+"""Batch canonicalisation driver.
 
-Pulls every active product via the public offers API, runs the rule-based
-extractor pipeline, groups by ``canonical_key``, then POSTs the groupings
-to the backend's ``/api/v1/canonical-products/bulk-upsert`` endpoint.
+Pulls every active product via the public offers API, runs the
+deterministic Phase-1 extractors, then groups using either:
+
+* the **Phase 1** exact-canonical_key bucketing (legacy, ``--no-use-embeddings``
+  / ``--phase1-grouping``), or
+* the **Phase 2** block-keyed union-find with rule + sentence-embedding
+  scoring (default), which also writes ambiguous pairs to
+  ``crawler/data/canonical-review-queue.jsonl`` for human inspection.
+
+Either path POSTs the resulting groupings to the backend's
+``/api/v1/canonical-products/bulk-upsert`` endpoint.
 
 Usage
 -----
@@ -15,6 +23,12 @@ Usage
                                    [--batch-size 200]
                                    [--limit-pages N]
                                    [--summary-samples N]
+                                   [--no-singletons]
+                                   [--use-embeddings | --no-use-embeddings]
+                                   [--auto-merge-cosine 0.95]
+                                   [--review-cosine 0.85]
+                                   [--phase1-grouping]
+                                   [--review-queue-path PATH]
 
 Defaults match the working-environment described in
 ``docs/canonicalisation-design.md``: read from ``http://127.0.0.1:8001``,
@@ -24,18 +38,7 @@ public read side and the authenticated write side on the same port).
 Output
 ------
 
-Prints a stats block:
-
-    products processed       12,101
-    manufacturer detected     7,832  (64.7%)
-    size detected             8,910  (73.6%)
-    pack >= 2                 1,420  (11.7%)
-    canonical groups          3,455
-       singletons             2,901
-       >= 2 members             554
-       >= 2 brands             319
-       >= 3 brands              19
-
+Prints stats blocks for fetch, group, and (Phase 2) the per-block summary.
 In dry-run mode (the default when no ``--backend-token`` is given) it
 also emits one JSON payload batch to stdout for inspection.
 """
@@ -44,6 +47,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 import time
 import urllib.error
@@ -53,18 +57,23 @@ from collections import Counter
 from typing import Any, Iterable
 
 # Allow `python -m scripts.canonicalise` from the crawler/ root.
-import os
-
 _HERE = os.path.dirname(os.path.abspath(__file__))
 _CRAWLER_ROOT = os.path.abspath(os.path.join(_HERE, ".."))
 if _CRAWLER_ROOT not in sys.path:
     sys.path.insert(0, _CRAWLER_ROOT)
 
 from scraper.canonical.extractors import ProductFeatures, extract_features  # noqa: E402
-from scraper.canonical.grouper import build_groups, groups_to_payload  # noqa: E402
+from scraper.canonical.grouper import (  # noqa: E402
+    GroupingStats,
+    build_groups,
+    build_groups_with_pairs,
+    groups_to_payload,
+    write_review_queue,
+)
 
 DEFAULT_PUBLIC_URL = "http://127.0.0.1:8001/api/public/v1"
 DEFAULT_BACKEND_URL = "http://127.0.0.1:8001/api/v1"
+DEFAULT_REVIEW_QUEUE_PATH = os.path.join(_CRAWLER_ROOT, "data", "canonical-review-queue.jsonl")
 
 
 # ---------------------------------------------------------------------------
@@ -271,9 +280,30 @@ def print_sample_groups(
             print(f"    {m.brand_slug:12} p={m.product_id:<6} {m.name}")
 
 
+def print_phase2_summary(stats: GroupingStats) -> None:
+    print()
+    print("# Phase 2 — block-keyed pair scoring summary")
+    print(f"  products total              : {stats.products_total:>6}")
+    print(f"  products with manufacturer  : {stats.products_with_brand:>6}")
+    print(f"  products with no candidates : {stats.products_no_candidates:>6}")
+    print(f"  blocks scanned              : {stats.blocks_total:>6}")
+    print(f"    multi-member blocks       : {stats.blocks_multi:>6}")
+    print(f"    skipped (too big)         : {stats.blocks_skipped_huge:>6}")
+    print(f"  pairs evaluated             : {stats.pairs_evaluated:>6}")
+    print(f"    rule auto-merged          : {stats.pairs_rule_merged:>6}")
+    print(f"    embedding auto-merged     : {stats.pairs_embedding_merged:>6}")
+    print(f"    queued for review         : {stats.pairs_review_queued:>6}")
+    print(f"    rule dropped              : {stats.pairs_rule_dropped:>6}")
+    print(f"    embedding dropped         : {stats.pairs_embedding_dropped:>6}")
+
+
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
+
+
+def _str2bool(v: str) -> bool:
+    return v.lower() in ("1", "true", "yes", "y", "on")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -301,6 +331,52 @@ def main(argv: list[str] | None = None) -> int:
                    help="Number of cross-brand sample groups to print.")
     p.add_argument("--no-singletons", action="store_true",
                    help="Drop groups with only one member from the payload.")
+
+    # --- Phase 2 flags ----------------------------------------------------
+    p.add_argument(
+        "--use-embeddings",
+        dest="use_embeddings",
+        type=_str2bool,
+        default=True,
+        nargs="?",
+        const=True,
+        help="Enable the sentence-embedding fallback for ambiguous pairs "
+        "(default: true). Pass --use-embeddings=false to disable.",
+    )
+    p.add_argument(
+        "--no-use-embeddings",
+        dest="use_embeddings",
+        action="store_false",
+        help="Disable the sentence-embedding fallback (alias for --use-embeddings=false).",
+    )
+    p.add_argument(
+        "--auto-merge-cosine",
+        type=float,
+        default=0.95,
+        help="Cosine threshold above which an ambiguous pair is auto-merged "
+        "by the embedding fallback. Default 0.95.",
+    )
+    p.add_argument(
+        "--review-cosine",
+        type=float,
+        default=0.85,
+        help="Cosine threshold above which an ambiguous pair is sent to the "
+        "review queue (between this and --auto-merge-cosine). Default 0.85.",
+    )
+    p.add_argument(
+        "--phase1-grouping",
+        action="store_true",
+        help="Force the legacy Phase-1 exact-canonical_key grouping path "
+        "(no block-keyed pair scoring, no embedding fallback). Useful for "
+        "comparing coverage uplift.",
+    )
+    p.add_argument(
+        "--review-queue-path",
+        default=DEFAULT_REVIEW_QUEUE_PATH,
+        help=f"Where to write the ambiguous-pair JSONL queue. "
+        f"Default: {DEFAULT_REVIEW_QUEUE_PATH}",
+    )
+
     args = p.parse_args(argv)
 
     dry_run = args.dry_run or not args.backend_token
@@ -326,8 +402,28 @@ def main(argv: list[str] | None = None) -> int:
           f"({100 * stats.get('skipped_no_brand', 0) / n:.1f}%)")
 
     print()
-    print("[2/3] grouping by canonical_key ...")
-    groups = build_groups(features)
+
+    method_by_pid: dict[int, str] | None = None
+    phase2_stats: GroupingStats | None = None
+
+    if args.phase1_grouping:
+        print("[2/3] grouping by exact canonical_key (Phase 1) ...")
+        groups = build_groups(features)
+    else:
+        print(
+            f"[2/3] grouping by block-key with pair scoring (Phase 2, "
+            f"embeddings={'on' if args.use_embeddings else 'off'}) ..."
+        )
+        t1 = time.time()
+        groups, phase2_stats = build_groups_with_pairs(
+            features,
+            use_embeddings=args.use_embeddings,
+            auto_merge_cosine=args.auto_merge_cosine,
+            review_cosine=args.review_cosine,
+        )
+        method_by_pid = phase2_stats.method_by_product_id  # type: ignore[attr-defined]
+        print(f"      grouped in {time.time() - t1:.1f}s")
+
     gstats = summarise_groups(groups)
     print(f"      groups                : {gstats['groups']:>6}")
     print(f"        singletons          : {gstats['singletons']:>6}")
@@ -335,12 +431,21 @@ def main(argv: list[str] | None = None) -> int:
     print(f"        >= 2 brands         : {gstats['cross_2_brands']:>6}")
     print(f"        >= 3 brands         : {gstats['cross_3_brands']:>6}")
 
+    if phase2_stats is not None:
+        print_phase2_summary(phase2_stats)
+        # Write the review queue file (deterministic ordering).
+        os.makedirs(os.path.dirname(args.review_queue_path), exist_ok=True)
+        n_review = write_review_queue(phase2_stats.review_pairs, args.review_queue_path)
+        print(f"      review queue          : {n_review} pairs → {args.review_queue_path}")
+
     print_sample_groups(groups, n=args.summary_samples, min_brands=2)
 
     print()
     print("[3/3] preparing payload ...")
     payload = groups_to_payload(
-        groups, include_singletons=not args.no_singletons
+        groups,
+        include_singletons=not args.no_singletons,
+        method_by_product_id=method_by_pid,
     )
     payload = [g for g in payload if any(
         m["confidence"] >= args.min_confidence for m in g["members"]

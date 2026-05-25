@@ -15,6 +15,12 @@ httpcache/
 *.jl
 *.jsonl
 
+# Phase 2 canonicalisation artefacts (review queue + cached embeddings).
+# canonical-review-queue.jsonl already matches *.jsonl above; keep an
+# explicit data/ entry so any future cached vectors or stats live
+# alongside it without polluting git.
+data/
+
 # Test / tools
 .pytest_cache/
 .ruff_cache/
