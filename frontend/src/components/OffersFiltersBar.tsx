@@ -1,8 +1,9 @@
 "use client";
 
-import { useRouter, useSearchParams, usePathname } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useTransition } from "react";
+import { useSearchParams } from "next/navigation";
+import { useEffect, useMemo, useRef } from "react";
 import { brandColour } from "@/lib/brand-colours";
+import { toggleInCsv, useUrlFilters } from "@/lib/use-url-filters";
 import type { Brand } from "@/lib/types";
 
 type Props = {
@@ -11,15 +12,6 @@ type Props = {
   /** Brand slug to lock the brand filter to (used on /brand/[slug]). */
   lockedBrand?: string;
 };
-
-function toggleInCsv(csv: string | null, value: string): string {
-  const set = new Set(
-    (csv ?? "").split(",").map((s) => s.trim()).filter(Boolean),
-  );
-  if (set.has(value)) set.delete(value);
-  else set.add(value);
-  return Array.from(set).join(",");
-}
 
 const DISCOUNT_STEPS = [0, 10, 20, 30, 50] as const;
 
@@ -53,15 +45,12 @@ function sortOptionKey(sort: string | null, dir: string | null): string {
 /**
  * Compact horizontal filter bar shared by `/`, `/offers`, and `/brand/[slug]`.
  * Mirrors the layout of `CanonicalFiltersBar` so the catalogue and the
- * comparison surface read as the same product. URL-driven, with the
- * `pendingSearchRef` synchronous-composition pattern so rapid multi-click
- * filters compose correctly through React's transition snapshot delay.
+ * comparison surface read as the same product. URL-driven; the
+ * synchronous-composition plumbing lives in `useUrlFilters`.
  */
 export function OffersFiltersBar({ brands, categories, lockedBrand }: Props) {
-  const router = useRouter();
-  const pathname = usePathname();
   const searchParams = useSearchParams();
-  const [pending, startTransition] = useTransition();
+  const { pending, updateParam, reset } = useUrlFilters();
 
   const selectedBrands = useMemo(
     () =>
@@ -87,29 +76,6 @@ export function OffersFiltersBar({ brands, categories, lockedBrand }: Props) {
     (minDiscount > 0 ? 1 : 0) +
     (validOnly ? 1 : 0) +
     (currentSortKey && currentSortKey !== "newest" ? 1 : 0);
-
-  // Hold the URL we *intended* to navigate to, regardless of whether
-  // React's transition has committed it yet. Without this, rapid clicks
-  // in the same tick diff against the stale searchParams snapshot and
-  // overwrite each other. Same pattern as CanonicalFiltersBar.
-  const pendingSearchRef = useRef<string>(`?${searchParams.toString()}`);
-  useEffect(() => {
-    pendingSearchRef.current = `?${searchParams.toString()}`;
-  }, [searchParams]);
-
-  const updateParam = useCallback(
-    (mutate: (sp: URLSearchParams) => void) => {
-      const sp = new URLSearchParams(pendingSearchRef.current);
-      mutate(sp);
-      sp.delete("page");
-      const qs = sp.toString();
-      pendingSearchRef.current = qs ? `?${qs}` : "";
-      startTransition(() => {
-        router.push(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
-      });
-    },
-    [router, pathname],
-  );
 
   const onToggleBrand = (slug: string) => {
     if (lockedBrand) return;
@@ -149,15 +115,6 @@ export function OffersFiltersBar({ brands, categories, lockedBrand }: Props) {
       sp.set("sort", opt.sort);
       sp.set("dir", opt.dir);
     });
-
-  const onReset = () => {
-    updateParam((sp) => {
-      const q = sp.get("q");
-      const keys = Array.from(sp.keys());
-      for (const key of keys) sp.delete(key);
-      if (q) sp.set("q", q);
-    });
-  };
 
   // Close any open <details> popovers when clicking outside the bar.
   // Without this, the brand popover stays open until the next click on
@@ -318,7 +275,7 @@ export function OffersFiltersBar({ brands, categories, lockedBrand }: Props) {
         {activeCount > 0 && (
           <button
             type="button"
-            onClick={onReset}
+            onClick={reset}
             className="ml-auto rounded-full bg-accent-soft px-3 py-1 text-xs font-semibold text-accent-hover shadow-raised-sm transition-shadow hover:shadow-raised focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
           >
             Καθαρισμός ({activeCount})
