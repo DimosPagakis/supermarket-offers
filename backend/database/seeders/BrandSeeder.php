@@ -15,10 +15,11 @@ class BrandSeeder extends Seeder
                 'name' => 'AB Vassilopoulos',
                 'slug' => 'ab',
                 'website_url' => 'https://www.ab.gr',
-                // Site is fully JS-rendered. /search/promotions is the offers gateway —
-                // requires browser execution to surface product listings.
+                // /search/promotions is the user-facing URL; the spider actually
+                // talks to AB's GraphQL persisted-query endpoint at
+                // https://www.ab.gr/api/v1/ (no Playwright needed).
                 'start_url' => 'https://www.ab.gr/search/promotions',
-                'strategy' => 'playwright',
+                'strategy' => 'http_api',
             ],
             [
                 'name' => 'Sklavenitis',
