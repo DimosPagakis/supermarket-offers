@@ -34,13 +34,13 @@ export default async function OffersPage({
       basePath="/offers"
       heading={
         <header className="flex flex-col gap-1">
-          <h1 className="text-2xl font-bold tracking-tight">Προσφορές</h1>
+          <h1 className="text-3xl font-bold tracking-tight text-ink">Προσφορές</h1>
           {query.q ? (
-            <p className="text-sm text-zinc-600 dark:text-zinc-400">
-              Αποτελέσματα για: <span className="font-medium">{query.q}</span>
+            <p className="text-sm text-ink-soft">
+              Αποτελέσματα για: <span className="font-medium text-ink">{query.q}</span>
             </p>
           ) : (
-            <p className="text-sm text-zinc-600 dark:text-zinc-400">
+            <p className="text-sm text-ink-soft">
               Όλες οι ενεργές προσφορές. Χρησιμοποίησε τα φίλτρα για να εστιάσεις.
             </p>
           )}

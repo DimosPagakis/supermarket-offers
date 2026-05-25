@@ -49,14 +49,17 @@ export default async function OfferDetailPage({
 
   return (
     <article className="flex flex-col gap-6">
-      <nav className="text-sm text-zinc-500">
-        <Link href="/offers" className="hover:text-emerald-600">
+      <nav className="text-sm text-ink-muted">
+        <Link
+          href="/offers"
+          className="transition-colors hover:text-brand"
+        >
           ← Όλες οι προσφορές
         </Link>
       </nav>
 
       <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-        <div className="relative aspect-square overflow-hidden rounded-xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
+        <div className="relative aspect-square overflow-hidden rounded-[var(--radius-card)] border border-border bg-surface shadow-card">
           {product.image_url ? (
             <Image
               src={product.image_url}
@@ -67,12 +70,12 @@ export default async function OfferDetailPage({
               priority
             />
           ) : (
-            <div className="flex h-full w-full items-center justify-center text-7xl text-zinc-300 dark:text-zinc-700">
+            <div className="flex h-full w-full items-center justify-center text-7xl text-ink-muted/40">
               <span aria-hidden>🛒</span>
             </div>
           )}
           {discount_pct != null && discount_pct > 0 && (
-            <span className="absolute left-3 top-3 rounded-md bg-rose-600 px-3 py-1 text-sm font-bold text-white shadow">
+            <span className="absolute left-3 top-3 rounded-full bg-accent px-3 py-1 text-sm font-bold uppercase tracking-wide text-white shadow-sm">
               -{discount_pct}%
             </span>
           )}
@@ -84,45 +87,45 @@ export default async function OfferDetailPage({
             href={`/brand/${brand.slug}`}
             size="md"
           />
-          <h1 className="text-2xl font-bold tracking-tight">{product.name}</h1>
+          <h1 className="text-3xl font-bold tracking-tight text-ink">{product.name}</h1>
           {product.category && (
-            <p className="text-sm text-zinc-500">{product.category}</p>
+            <p className="text-sm text-ink-muted">{product.category}</p>
           )}
           {product.unit && (
-            <p className="text-sm text-zinc-600 dark:text-zinc-400">
+            <p className="text-sm text-ink-soft">
               Συσκευασία: {product.unit}
             </p>
           )}
 
           <div className="flex items-baseline gap-3">
-            <span className="text-4xl font-bold text-emerald-600 dark:text-emerald-400">
+            <span className="text-4xl font-bold text-ink">
               {formatPrice(price, currency)}
             </span>
             {original_price != null && original_price > price && (
-              <span className="text-xl text-zinc-400 line-through">
+              <span className="text-xl text-ink-muted line-through">
                 {formatPrice(original_price, currency)}
               </span>
             )}
           </div>
           {savings != null && (
-            <p className="text-sm font-medium text-rose-600">
+            <p className="inline-flex w-fit items-center rounded-full bg-accent-soft px-3 py-1 text-sm font-semibold text-accent-hover">
               Εξοικονομείς {formatPrice(savings, currency)}
             </p>
           )}
 
-          <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+          <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm text-ink-soft">
             {valid_from && (
               <>
-                <dt className="text-zinc-500">Ισχύς από</dt>
+                <dt className="text-ink-muted">Ισχύς από</dt>
                 <dd>{formatDate(valid_from)}</dd>
               </>
             )}
             {valid_to && (
               <>
-                <dt className="text-zinc-500">Ισχύς έως</dt>
+                <dt className="text-ink-muted">Ισχύς έως</dt>
                 <dd>
                   {formatDate(valid_to)}{" "}
-                  <span className="text-xs text-zinc-500">
+                  <span className="text-xs text-ink-muted">
                     ({formatValidity(valid_to)})
                   </span>
                 </dd>
@@ -135,7 +138,7 @@ export default async function OfferDetailPage({
               href={product.url}
               target="_blank"
               rel="noreferrer noopener"
-              className="mt-2 inline-flex items-center justify-center rounded-md bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-500"
+              className="mt-2 inline-flex items-center justify-center rounded-full bg-accent px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-accent-hover"
             >
               Δες στο {brand.name} ↗
             </a>

@@ -44,18 +44,22 @@ export default async function BrandPage({
   return (
     <div className="flex flex-col gap-6">
       <div
-        className="rounded-xl px-6 py-8 text-white shadow"
-        style={{ backgroundColor: colour.bg, color: colour.fg }}
+        className="rounded-[var(--radius-card)] border border-border bg-surface px-6 py-8 shadow-card"
+        style={{
+          // Soft tinted accent strip on the left edge using the brand's
+          // identity hue — recognisable without dominating the canvas.
+          borderLeft: `4px solid ${colour.ring}`,
+        }}
       >
-        <h1 className="text-3xl font-bold">{brand.name}</h1>
-        <p className="mt-1 text-sm opacity-90">
+        <h1 className="text-3xl font-bold tracking-tight text-ink">{brand.name}</h1>
+        <p className="mt-1 text-sm text-ink-soft">
           Όλες οι ενεργές προσφορές · {page.meta.total.toLocaleString("el-GR")} προϊόντα
         </p>
         <a
           href={brand.website_url}
           target="_blank"
           rel="noreferrer noopener"
-          className="mt-3 inline-block text-sm underline opacity-90 hover:opacity-100"
+          className="mt-3 inline-block text-sm font-medium text-brand underline-offset-2 hover:underline"
         >
           Επίσημος ιστότοπος ↗
         </a>

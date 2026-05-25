@@ -61,4 +61,15 @@ describe("OfferCard", () => {
     const link = screen.getByRole("link");
     expect(link).toHaveAttribute("href", "/offers/42");
   });
+
+  it("renders the discount badge in the accent (French pink) palette", () => {
+    // Guards the 60-30-10 palette: discount pills must use the accent
+    // tokens. If anyone reintroduces rose-600 / red-500 / emerald-* etc.
+    // here this assertion fails — and the eyeball pass would catch it
+    // anyway, but tests are cheaper than humans.
+    render(<OfferCard offer={baseOffer} />);
+    const badge = screen.getByText("-30%");
+    expect(badge.className).toMatch(/\bbg-accent\b/);
+    expect(badge.className).toMatch(/\btext-white\b/);
+  });
 });

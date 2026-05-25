@@ -45,7 +45,7 @@ export function OffersListView({
 
       <div className="flex min-w-0 flex-1 flex-col gap-4">
         {heading}
-        <div className="flex items-center justify-between text-sm text-zinc-600 dark:text-zinc-400">
+        <div className="flex items-center justify-between text-sm text-ink-soft">
           <span>
             {page.meta.total > 0
               ? `${page.meta.total.toLocaleString("el-GR")} προσφορές`

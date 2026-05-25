@@ -8,16 +8,15 @@ export function EmptyState({
   message = "Δοκίμασε διαφορετικά φίλτρα ή έλεγξε ξανά αύριο.",
 }: Props) {
   return (
-    <div className="flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-zinc-300 bg-white px-6 py-16 text-center dark:border-zinc-700 dark:bg-zinc-900">
-      <div className="text-5xl" aria-hidden>
+    <div className="flex flex-col items-center justify-center gap-3 rounded-[var(--radius-card)] border border-dashed border-border-strong bg-surface px-6 py-16 text-center">
+      <div
+        className="flex h-16 w-16 items-center justify-center rounded-full bg-brand-fade text-3xl text-brand"
+        aria-hidden
+      >
         🛒
       </div>
-      <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
-        {title}
-      </h2>
-      <p className="max-w-sm text-sm text-zinc-600 dark:text-zinc-400">
-        {message}
-      </p>
+      <h2 className="text-lg font-semibold text-ink">{title}</h2>
+      <p className="max-w-sm text-sm text-ink-soft">{message}</p>
     </div>
   );
 }

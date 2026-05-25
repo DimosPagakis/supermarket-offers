@@ -26,31 +26,28 @@ export function Pagination({ currentPage, lastPage, hrefForPage }: Props) {
   const next = currentPage < lastPage ? hrefForPage(currentPage + 1) : null;
 
   const baseBtn =
-    "inline-flex h-9 min-w-9 items-center justify-center rounded-md px-3 text-sm font-medium transition";
+    "inline-flex h-9 min-w-9 items-center justify-center rounded-full px-3 text-sm font-medium transition-colors";
+  const navBtn = `${baseBtn} border border-border text-ink-soft hover:bg-brand-fade hover:text-brand`;
+  const disabledBtn = `${baseBtn} border border-border text-ink-muted/50`;
 
   return (
     <nav className="flex items-center justify-center gap-1" aria-label="Σελιδοποίηση">
       {prev ? (
-        <Link
-          href={prev}
-          className={`${baseBtn} border border-zinc-200 text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800`}
-        >
+        <Link href={prev} className={navBtn}>
           ← Προηγούμενη
         </Link>
       ) : (
-        <span className={`${baseBtn} border border-zinc-200 text-zinc-300 dark:border-zinc-800 dark:text-zinc-700`}>
-          ← Προηγούμενη
-        </span>
+        <span className={disabledBtn}>← Προηγούμενη</span>
       )}
       {items.map((p, i) =>
         p === "…" ? (
-          <span key={`gap-${i}`} className="px-2 text-zinc-400">
+          <span key={`gap-${i}`} className="px-2 text-ink-muted">
             …
           </span>
         ) : p === currentPage ? (
           <span
             key={p}
-            className={`${baseBtn} bg-emerald-600 text-white`}
+            className={`${baseBtn} bg-brand text-white shadow-sm`}
             aria-current="page"
           >
             {p}
@@ -59,23 +56,18 @@ export function Pagination({ currentPage, lastPage, hrefForPage }: Props) {
           <Link
             key={p}
             href={hrefForPage(p)}
-            className={`${baseBtn} border border-zinc-200 text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800`}
+            className={`${baseBtn} text-ink-soft hover:bg-brand-fade hover:text-brand`}
           >
             {p}
           </Link>
         ),
       )}
       {next ? (
-        <Link
-          href={next}
-          className={`${baseBtn} border border-zinc-200 text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800`}
-        >
+        <Link href={next} className={navBtn}>
           Επόμενη →
         </Link>
       ) : (
-        <span className={`${baseBtn} border border-zinc-200 text-zinc-300 dark:border-zinc-800 dark:text-zinc-700`}>
-          Επόμενη →
-        </span>
+        <span className={disabledBtn}>Επόμενη →</span>
       )}
     </nav>
   );
