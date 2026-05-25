@@ -21,12 +21,37 @@ Two grouping strategies live here:
 Both strategies emit the same ``payload`` shape via :func:`group_to_payload`
 / :func:`groups_to_payload` so the bulk-upsert endpoint can't tell which
 path produced a given canonical product.
+
+Phase 2.1 over-merge guard — ``max_block_size``
+-----------------------------------------------
+
+A block is a ``(manufacturer, size, pack)`` triple. Blocks of size > 8
+are typically *flavour-rich families* (Axe deodorants, Nirvana ice
+cream tubs, Ariel pods, Ajax scents). In such blocks:
+
+* the variant-Jaccard signal is statistically reliable (one
+  discriminator token per SKU stripped to ≤4 boilerplate tokens), but
+* the sentence-embedding fallback is **not** — boilerplate dominates
+  cosine on Greek product names — and
+* union-find amplifies a single false-positive edge into a 30-way
+  collapse via transitive merges.
+
+For blocks bigger than the cap we skip pairwise scoring entirely. Their
+members fall back to Phase-1-equivalent semantics (each treated as a
+singleton block); exact ``canonical_key`` collisions still cluster via
+the caller's downstream merge. We deliberately accept the (small)
+recall hit on big families in exchange for the precision win.
+
+The cap is overridable at runtime via the ``CANONICAL_MAX_BLOCK_SIZE``
+environment variable so we can re-tune without a code change. Default
+is 8 (down from 60 in the original Phase-2 spike).
 """
 
 from __future__ import annotations
 
 import json
 import logging
+import os
 from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import Any
@@ -36,6 +61,34 @@ from .extractors import ProductFeatures
 from .matcher import match_decision
 
 logger = logging.getLogger(__name__)
+
+
+# Default cap on per-block pairwise scoring. Bigger blocks bypass the
+# embedding fallback entirely (see module docstring). Overridable via
+# the ``CANONICAL_MAX_BLOCK_SIZE`` environment variable.
+DEFAULT_MAX_BLOCK_SIZE = 8
+
+
+def _resolve_max_block_size(explicit: int | None) -> int:
+    """Resolve the effective ``max_block_size``: explicit > env > default."""
+    if explicit is not None:
+        return explicit
+    raw = os.environ.get("CANONICAL_MAX_BLOCK_SIZE")
+    if raw:
+        try:
+            parsed = int(raw)
+            if parsed > 0:
+                return parsed
+            logger.warning(
+                "CANONICAL_MAX_BLOCK_SIZE=%r is not positive; using default %d",
+                raw, DEFAULT_MAX_BLOCK_SIZE,
+            )
+        except ValueError:
+            logger.warning(
+                "CANONICAL_MAX_BLOCK_SIZE=%r is not an integer; using default %d",
+                raw, DEFAULT_MAX_BLOCK_SIZE,
+            )
+    return DEFAULT_MAX_BLOCK_SIZE
 
 
 # ---------------------------------------------------------------------------
@@ -213,7 +266,7 @@ def build_groups_with_pairs(
     review_cosine: float = 0.85,
     rule_ambiguous_floor: float = 0.40,
     rule_auto_merge_floor: float = 0.95,
-    max_block_size: int = 60,
+    max_block_size: int | None = None,
     embedding_model: Any | None = None,
 ) -> tuple[dict[str, list[ProductFeatures]], GroupingStats]:
     """Phase-2 grouping: block by (manufacturer, size, pack), then
@@ -240,6 +293,7 @@ def build_groups_with_pairs(
     stats = GroupingStats()
     stats.products_total = len(features)
     stats.products_with_brand = sum(1 for f in features if f.manufacturer is not None)
+    effective_max_block_size = _resolve_max_block_size(max_block_size)
 
     # ---- 1. Block by (manufacturer, size, pack). -----------------------
     blocks: dict[tuple[str, tuple[float, str] | None, int], list[ProductFeatures]] = (
@@ -262,12 +316,12 @@ def build_groups_with_pairs(
             singleton_pids.add(members[0].product_id)
         else:
             stats.blocks_multi += 1
-            if len(members) > max_block_size:
+            if len(members) > effective_max_block_size:
                 logger.warning(
                     "block %r has %d members; exceeds max_block_size=%d, skipping",
                     bk,
                     len(members),
-                    max_block_size,
+                    effective_max_block_size,
                 )
                 stats.blocks_skipped_huge += 1
                 # Skipped blocks fall back to Phase-1 exact canonical_key
