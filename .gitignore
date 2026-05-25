@@ -24,3 +24,6 @@ venv/
 
 # Node (future frontend)
 node_modules/
+
+# Agent worktrees (created by Hermes Agent tool with isolation: worktree)
+.worktrees/
