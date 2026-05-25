@@ -37,6 +37,47 @@ Conclusion: walking every homepage campaign anchor is the complete
 "all available offers" discovery. There is no untapped URL bucket
 on lidl-hellas.gr today.
 
+Weekly offer-count variability (verified 2026-05-25 live run)
+-------------------------------------------------------------
+Lidl's *priced* offer count swings wildly between weeks and within a
+week:
+
+* Last-week campaigns (``...-26kw21``) keep their URLs alive for a
+  day or two after Thursday rollover but ship cards with empty
+  ``regionsPrices`` — those legitimately yield zero offers.
+* Themed promo campaigns (``alpen-fest-style``, ``aroma-latinikis-
+  amerikis``, ``paidi-axesoyar`` …) often render a hero banner with
+  no priced products at all.
+* The bulk of priced offers concentrate in 4–6 campaigns
+  (``evdomadiaies-epiloges``, ``xxl-proionta``,
+  ``parkside-performance``, ``silvercrest-koyzina``,
+  ``ora-gia-psisimo``, ``lidl-plus``).
+
+Live breakdown captured 2026-05-25 (kw22):
+
+  cards  priced  campaign
+   ----  ------  --------
+     26      23  /c/evdomadiaies-epiloges-26kw22/a10095458
+      8       6  /c/lidl-plus-26kw22/a10095457
+      9       9  /c/ora-gia-psisimo-26kw22/a10095461
+      5       5  /c/aparaitita-synodeytika-26kw22/a10095507
+     12      12  /c/xxl-proionta-26kw22/a10095508
+      4       4  /c/alpen-fest-style-26kw22/a10095509
+      4       4  /c/aroma-latinikis-amerikis-26kw22/a10095510
+      6       6  /c/apolaystiko-dialeimma-26kw22/a10095520
+     11      11  /c/parkside-performance-ergaleia-exoplismos-26kw22/a10095521
+      5       5  /c/paidi-paichnidi-26kw22/a10095522
+      3       3  /c/paidi-endysi-26kw22/a10095529
+      8       8  /c/silvercrest-koyzina-oikiakos-exoplismos-26kw22/a10095531
+   (all other 19 campaigns yielded 0 priced offers — empty banners,
+   expired kw21, or themed promos without priced cards)
+
+  Total: 96 priced offers across 12 productive campaigns.
+
+This is why we treat "zero priced offers on a campaign URL" as INFO
+rather than WARNING — it's the modal outcome for ~60% of the campaign
+anchors Lidl publishes.
+
 Safety cap
 ----------
 ``LIDL_MAX_CAMPAIGNS`` puts a ceiling on how many campaign URLs we

@@ -20,11 +20,20 @@ from scraper.items import OfferItem
 from scraper.parsers.lidl import extract_offers
 
 FIXTURE = Path(__file__).parent / "fixtures" / "lidl" / "listing.html"
+# Second fixture captured live on 2026-05-25 from the same campaign URL
+# (``/c/evdomadiaies-epiloges-26kw22/a10095458``) *after* Lidl flipped the
+# active offers from ``futurePrices`` to ``currentPrice``. Both fixtures
+# must parse — see ``_pick_price_block`` in scraper/parsers/lidl.py.
+FIXTURE_CURRENT = Path(__file__).parent / "fixtures" / "lidl" / "listing_current.html"
 SCRAPED_AT = datetime(2026, 5, 25, 12, 0, 0, tzinfo=timezone.utc)
 
 
 def _load_offers() -> list[OfferItem]:
     return list(extract_offers(FIXTURE.read_text(encoding="utf-8"), SCRAPED_AT))
+
+
+def _load_offers_current() -> list[OfferItem]:
+    return list(extract_offers(FIXTURE_CURRENT.read_text(encoding="utf-8"), SCRAPED_AT))
 
 
 def test_extracts_priced_offers_only() -> None:
@@ -128,3 +137,52 @@ def test_payload_is_backend_contract_shaped() -> None:
     # Dates serialized as ISO strings.
     assert payload["valid_from"] == "2026-05-27"
     assert payload["valid_to"] == "2026-06-03"
+
+
+# --------------------------------------------------------------------------
+# Regression: ``currentPrice`` shape (2026-05-25 schema drift)
+# --------------------------------------------------------------------------
+#
+# After the Thursday rollover, Lidl moves a now-live offer's price block
+# from ``regionsPrices.<region>.futurePrices[0].price`` into a sibling
+# ``regionsPrices.<region>.currentPrice`` dict (identical inner shape).
+# The parser used to look only at ``futurePrices`` and silently dropped
+# the entire current-week catalogue once the rollover hit — observed live
+# on 2026-05-25 as a collapse from ~85 priced offers to ~27. The cases
+# below pin the fix.
+
+
+def test_extracts_priced_offers_from_currentPrice_shape() -> None:
+    """The currentPrice fixture has 26 grid cards. 23 carry a live
+    ``currentPrice`` block, 3 are unpriced wrappers (empty regionsPrices)
+    and must be skipped silently. Net expected: 23 priced offers."""
+    offers = _load_offers_current()
+    assert len(offers) == 23, f"expected 23 priced offers, got {len(offers)}"
+
+
+def test_currentPrice_first_offer_maps_all_critical_fields() -> None:
+    """End-to-end mapping check against the currentPrice fixture. Same
+    productId (11022981) as the futurePrices fixture so we know the inner
+    schema is identical regardless of which sibling key wraps it."""
+    offers = _load_offers_current()
+    first = offers[0]
+
+    assert first.name == "Χαρτί κουζίνας 3πλα φύλλα"
+    assert first.external_id == "11022981"
+    assert first.price == Decimal("2.29")
+    assert first.original_price == Decimal("3.29")
+    assert first.discount_pct == 30
+    assert first.currency == "EUR"
+    # currentPrice carries a startDate of "now-ish" (the moment Lidl
+    # flipped the promo live) and an endDate matching the campaign end.
+    # We only assert the campaign-end date since the start moves around.
+    assert first.valid_to == date(2026, 6, 3)
+    assert first.url is not None and "p11022981" in first.url
+    assert first.unit == "208 φύλλα (720 g)"
+
+
+def test_currentPrice_offers_have_no_duplicate_external_ids() -> None:
+    """Dedupe must still work after switching to the currentPrice shape."""
+    offers = _load_offers_current()
+    ids = [o.external_id for o in offers if o.external_id]
+    assert len(ids) == len(set(ids)), "duplicate external_ids leaked through"

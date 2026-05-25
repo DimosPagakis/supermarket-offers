@@ -68,14 +68,44 @@ runs.
 Retrying won't fix that — it'll just hammer the backend with the same bad
 request. Fail fast, log the response body, let the operator investigate.
 
-### Why the Lidl spider does a two-step landing → flyer crawl
+### Why the Lidl spider does a homepage → campaign-pages crawl
 
-Lidl's weekly flyer URLs include a week-specific slug (e.g. `26kw21`) that
-rotates every Thursday. Hard-coding it means weekly seed updates. Instead the
-spider starts at the stable flyer landing page (`/c/fylladio-lidl/s10020481`),
-finds the most recent "Από DD.MM" anchor, and follows it. Selector drift is
-logged as a warning rather than raising — keeps the spider alive when Lidl
-re-skins the page.
+Lidl's weekly flyer URLs include a week-specific slug (e.g. `26kw22`) that
+rotates every Thursday. Hard-coding it means weekly seed updates. The current
+spider starts at the homepage (`https://www.lidl-hellas.gr/`) — the most
+stable URL on the site — and harvests every `/c/<theme>-{YY}kw{WW}/a<id>`
+anchor it lists. Each campaign page embeds its products as
+`data-grid-data="<HTML-entity-encoded JSON>"` attributes which the parser
+in `scraper/parsers/lidl.py` decodes.
+
+(The older flyer-landing-page strategy in `/c/fylladio-lidl/s10020481`
+turned out to be an image-viewer with no parseable HTML.)
+
+### Why Lidl's priced-offer count is *expected* to swing 5×-fold week to week
+
+A single weekly run can yield anywhere from 25 to 100+ priced offers
+depending on:
+* whether the Thursday rollover already happened (last-week campaign
+  URLs linger for ~24h with empty `regionsPrices` blocks);
+* how many of the 30-odd published campaigns are themed banners
+  (`alpen-fest-style`, `paidi-axesoyar`, …) with zero priced products;
+* whether Lidl is mid-rollover and most active offers live under
+  `regionsPrices.<region>.currentPrice` (running now) vs
+  `futurePrices` (starting in a day or two).
+
+The parser handles **both** `currentPrice` and `futurePrices` shapes —
+the original PR shipped with only `futurePrices` handling, which
+silently dropped the entire live catalogue once the rollover flipped
+offers from "future" to "current" (incident 2026-05-25: count collapsed
+from ~85 to 27 until `currentPrice` support was added). Both fixtures
+are pinned in `tests/test_lidl_parser.py`.
+
+Bottom line: a Lidl run reporting 20–30 offers is **not automatically a
+regression**. Check the per-campaign INFO log (`yielded N offers from
+<url>`) and the run's per-campaign breakdown before assuming a bug.
+True regressions look like "every campaign yields 0 offers despite
+non-zero `data-grid-data` counts" — which is exactly the signal the
+parser's DEBUG `found {N} data-grid-data attributes` line surfaces.
 
 ### Why selectors that miss log a warning instead of crashing
 
