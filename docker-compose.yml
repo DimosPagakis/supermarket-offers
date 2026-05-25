@@ -1,0 +1,17 @@
+# Stub — wired up properly when crawler service lands.
+# For now backend runs locally via `php artisan serve` against SQLite.
+services:
+  backend:
+    image: php:8.3-cli
+    working_dir: /app
+    volumes:
+      - ./backend:/app
+    command: php -S 0.0.0.0:8000 -t public
+    ports:
+      - "8000:8000"
+  # crawler:
+  #   build: ./crawler
+  #   depends_on:
+  #     - backend
+  #   environment:
+  #     BACKEND_URL: http://backend:8000
