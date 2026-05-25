@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Public\V1;
 
+use App\Http\Requests\Concerns\RejectsUnknownQueryParams;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -16,6 +17,8 @@ use Illuminate\Validation\Rule;
  */
 class CanonicalProductIndexRequest extends FormRequest
 {
+    use RejectsUnknownQueryParams;
+
     public function authorize(): bool
     {
         return true;
@@ -37,12 +40,6 @@ class CanonicalProductIndexRequest extends FormRequest
 
     public function withValidator(Validator $validator): void
     {
-        $validator->after(function (Validator $v): void {
-            $allowed = array_keys($this->rules());
-            $extra = array_diff(array_keys($this->query()), $allowed);
-            foreach ($extra as $key) {
-                $v->errors()->add($key, "Unknown query parameter '{$key}'.");
-            }
-        });
+        $this->rejectUnknownQueryParams($validator);
     }
 }

@@ -2,6 +2,8 @@
 
 namespace App\Http\Requests\Public\V1;
 
+use App\Http\Requests\Concerns\RejectsUnknownQueryParams;
+use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -15,6 +17,8 @@ use Illuminate\Validation\Rule;
  */
 class OfferIndexRequest extends FormRequest
 {
+    use RejectsUnknownQueryParams;
+
     public function authorize(): bool
     {
         return true;
@@ -40,18 +44,8 @@ class OfferIndexRequest extends FormRequest
         ];
     }
 
-    /**
-     * Reject unknown query params loudly. The whitelist is the union of
-     * keys in rules() — anything else is a typo or a hostile probe.
-     */
-    public function withValidator(\Illuminate\Contracts\Validation\Validator $validator): void
+    public function withValidator(Validator $validator): void
     {
-        $validator->after(function (\Illuminate\Contracts\Validation\Validator $v): void {
-            $allowed = array_keys($this->rules());
-            $extra = array_diff(array_keys($this->query()), $allowed);
-            foreach ($extra as $key) {
-                $v->errors()->add($key, "Unknown query parameter '{$key}'.");
-            }
-        });
+        $this->rejectUnknownQueryParams($validator);
     }
 }

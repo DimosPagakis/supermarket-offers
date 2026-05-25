@@ -5,6 +5,7 @@ namespace App\Http\Requests\Api\V1;
 use App\Models\CrawlRun;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 class UpdateCrawlRunRequest extends FormRequest
 {
@@ -27,7 +28,7 @@ class UpdateCrawlRunRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'status' => ['required', 'string', 'in:success,failed,partial'],
+            'status' => ['required', 'string', Rule::in(CrawlRun::TERMINAL_STATUSES)],
             'offers_found' => ['required', 'integer', 'min:0'],
             'offers_persisted' => ['nullable', 'integer', 'min:0'],
             'error_message' => ['nullable', 'string', 'max:5000'],

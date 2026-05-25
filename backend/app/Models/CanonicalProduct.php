@@ -6,6 +6,10 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Facades\DB;
 
+// The "latest offer per member product" query lives on
+// Offer::latestPerProductIds() — controllers compose it explicitly so
+// the relation tree on this model stays shaped to actual foreign keys.
+
 /**
  * A canonical product — one row per physical SKU across all chains.
  *
@@ -47,32 +51,6 @@ class CanonicalProduct extends Model
     public function products(): HasMany
     {
         return $this->hasMany(Product::class);
-    }
-
-    /**
-     * Latest offer per member product.
-     *
-     * Mirrors the latest-per-product logic in OfferController::index():
-     * pick MAX(offers.id) per product_id over the canonical's members,
-     * then re-query offers WHERE id IN (...). Returns an Eloquent
-     * relation so callers can `->with(['currentOffers.product.brand'])`
-     * for the comparison view in a single round trip.
-     */
-    public function currentOffers(): HasMany
-    {
-        $latestIds = Offer::query()
-            ->selectRaw('MAX(offers.id) as id')
-            ->join('products', 'products.id', '=', 'offers.product_id')
-            ->where('products.canonical_product_id', $this->id)
-            ->groupBy('offers.product_id');
-
-        return $this->hasMany(Offer::class, 'product_id', 'id')
-            ->setQuery(
-                Offer::query()
-                    ->with(['product.brand'])
-                    ->whereIn('offers.id', $latestIds)
-                    ->getQuery()
-            );
     }
 
     /**

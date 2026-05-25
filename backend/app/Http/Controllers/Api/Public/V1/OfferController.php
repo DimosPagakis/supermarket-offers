@@ -13,7 +13,6 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Resources\Json\ResourceCollection;
 use Illuminate\Support\Carbon;
-use Illuminate\Support\Facades\DB;
 
 class OfferController extends Controller
 {
@@ -39,27 +38,20 @@ class OfferController extends Controller
     {
         $filters = $request->validated();
 
-        $brandSlugs = null;
-        if ($brand !== null) {
-            // Route-scoped: /brands/{slug}/offers — fixed to a single brand.
-            $brandSlugs = [$brand->slug];
-        } elseif (isset($filters['brand'])) {
-            $brandSlugs = array_values(array_filter(array_map(
-                'trim',
-                explode(',', (string) $filters['brand']),
-            )));
-        }
+        // The route can pin to one brand (/brands/{slug}/offers) or the
+        // query string can scope to a CSV of slugs (?brand=ab,lidl).
+        // Route binding wins when present.
+        $brandSlugs = match (true) {
+            $brand !== null => [$brand->slug],
+            isset($filters['brand']) => $this->parseCsv((string) $filters['brand']),
+            default => null,
+        };
 
         $base = $this->buildFilteredOfferQuery($filters, $brandSlugs);
 
-        // Latest-per-product collapse: pick MAX(id) per product_id over the
-        // filtered set, then re-query offers WHERE id IN (...). Using MAX(id)
-        // (not MAX(scraped_at)) gives us a deterministic single row even
-        // when two offers for the same product share scraped_at; ids are
-        // monotonic so the higher id is the more recently inserted row.
-        $latestIds = (clone $base)
-            ->select(DB::raw('MAX(offers.id) as id'))
-            ->groupBy('offers.product_id');
+        // Collapse to one offer per product (latest by id). See
+        // Offer::latestPerProductIds() for the why-MAX(id) rationale.
+        $latestIds = Offer::latestPerProductIds($base);
 
         $sort = $filters['sort'] ?? 'discount_pct';
         $dir = $filters['dir'] ?? 'desc';
@@ -115,7 +107,7 @@ class OfferController extends Controller
                     'original_price' => $row->original_price !== null ? (float) $row->original_price : null,
                     'discount_pct' => $row->discount_pct !== null ? (int) $row->discount_pct : null,
                     'currency' => $row->currency,
-                    'scraped_at' => optional($row->scraped_at)->toIso8601String(),
+                    'scraped_at' => $row->scraped_at?->toIso8601String(),
                 ])
                 ->all();
 
@@ -143,19 +135,9 @@ class OfferController extends Controller
         }
 
         if (isset($filters['category']) && $filters['category'] !== '') {
-            // Case-insensitive exact match across casing variants. SQLite's
-            // LOWER() is ASCII-only and so it can't lowercase Greek
-            // characters; we sidestep that by enumerating the caller's
-            // input in original, lower, and upper variants. Categories
-            // are a curated set (~tens of values), so this is cheap.
-            $category = $filters['category'];
-            $variants = array_values(array_unique([
-                $category,
-                mb_strtolower($category, 'UTF-8'),
-                mb_strtoupper($category, 'UTF-8'),
-                mb_convert_case($category, MB_CASE_TITLE, 'UTF-8'),
-            ]));
-            $query->whereIn('products.category', $variants);
+            // Case-insensitive exact match across Greek casing variants —
+            // SQLite's LOWER() is ASCII-only so we enumerate explicitly.
+            $query->whereIn('products.category', StringNormalizer::caseVariants($filters['category']));
         }
 
         if (isset($filters['min_discount'])) {
@@ -190,6 +172,19 @@ class OfferController extends Controller
         }
 
         return $query->select('offers.*');
+    }
+
+    /**
+     * Parse a CSV query parameter into a clean list — trimmed, with
+     * empty entries dropped. Returns a 0-indexed array suitable for
+     * `whereIn`. An all-empty input collapses to an empty array which
+     * the caller should treat as "no filter".
+     *
+     * @return array<int, string>
+     */
+    private function parseCsv(string $value): array
+    {
+        return array_values(array_filter(array_map('trim', explode(',', $value)), fn (string $s) => $s !== ''));
     }
 
     /**

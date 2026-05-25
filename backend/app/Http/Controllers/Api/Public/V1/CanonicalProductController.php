@@ -8,6 +8,8 @@ use App\Http\Resources\Public\CanonicalProductDetailResource;
 use App\Http\Resources\Public\CanonicalProductListResource;
 use App\Models\CanonicalProduct;
 use App\Models\Offer;
+use App\Support\StringNormalizer;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Resources\Json\ResourceCollection;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -51,16 +53,9 @@ class CanonicalProductController extends Controller
         }
 
         if (isset($filters['category']) && $filters['category'] !== '') {
-            // Same case-insensitive variant trick as the offers
-            // endpoint — SQLite's LOWER() is ASCII-only.
-            $category = $filters['category'];
-            $variants = array_values(array_unique([
-                $category,
-                mb_strtolower($category, 'UTF-8'),
-                mb_strtoupper($category, 'UTF-8'),
-                mb_convert_case($category, MB_CASE_TITLE, 'UTF-8'),
-            ]));
-            $query->whereIn('category', $variants);
+            // Case-insensitive match across Greek casing variants — see
+            // StringNormalizer::caseVariants() for the why-not-LOWER().
+            $query->whereIn('category', StringNormalizer::caseVariants($filters['category']));
         }
 
         if (isset($filters['brand']) && $filters['brand'] !== '') {
@@ -113,17 +108,11 @@ class CanonicalProductController extends Controller
      */
     public function show(CanonicalProduct $canonicalProduct): CanonicalProductDetailResource
     {
-        // Fetch latest offer per member product. Same correlated-MAX
-        // technique used elsewhere — portable across SQLite and Postgres.
-        $latestIds = Offer::query()
-            ->selectRaw('MAX(offers.id) as id')
-            ->join('products', 'products.id', '=', 'offers.product_id')
-            ->where('products.canonical_product_id', $canonicalProduct->id)
-            ->groupBy('offers.product_id');
-
+        // Fetch latest offer per member product — same collapse semantics
+        // used by the offers list endpoint.
         $offers = Offer::query()
             ->with(['product.brand'])
-            ->whereIn('offers.id', $latestIds)
+            ->whereIn('offers.id', Offer::latestPerProductIds($this->offersForCanonical([$canonicalProduct->id])))
             ->get();
 
         // Restrict to currently-valid offers — NULL bounds are open.
@@ -156,9 +145,9 @@ class CanonicalProductController extends Controller
                         'price' => $o->price !== null ? (float) $o->price : null,
                         'original_price' => $o->original_price !== null ? (float) $o->original_price : null,
                         'discount_pct' => $o->discount_pct !== null ? (int) $o->discount_pct : null,
-                        'valid_from' => optional($o->valid_from)->format('Y-m-d'),
-                        'valid_to' => optional($o->valid_to)->format('Y-m-d'),
-                        'scraped_at' => optional($o->scraped_at)->toIso8601String(),
+                        'valid_from' => $o->valid_from?->format('Y-m-d'),
+                        'valid_to' => $o->valid_to?->format('Y-m-d'),
+                        'scraped_at' => $o->scraped_at?->toIso8601String(),
                     ],
                 ];
             })
@@ -198,15 +187,9 @@ class CanonicalProductController extends Controller
             return;
         }
 
-        $latestIds = Offer::query()
-            ->selectRaw('MAX(offers.id) as id')
-            ->join('products', 'products.id', '=', 'offers.product_id')
-            ->whereIn('products.canonical_product_id', $ids)
-            ->groupBy('offers.product_id');
-
         $rows = Offer::query()
             ->with(['product.brand'])
-            ->whereIn('offers.id', $latestIds)
+            ->whereIn('offers.id', Offer::latestPerProductIds($this->offersForCanonical($ids)))
             ->get();
 
         $byCanonical = [];
@@ -261,5 +244,20 @@ class CanonicalProductController extends Controller
                 $canonical->cheapest_brand = null;
             }
         }
+    }
+
+    /**
+     * Offer-rows joined to their member products and filtered to the
+     * canonical(s) in question. The result is shape-compatible with
+     * Offer::latestPerProductIds() — feed it in there to collapse to
+     * one offer per product.
+     *
+     * @param  array<int, int>  $canonicalIds
+     */
+    private function offersForCanonical(array $canonicalIds): Builder
+    {
+        return Offer::query()
+            ->join('products', 'products.id', '=', 'offers.product_id')
+            ->whereIn('products.canonical_product_id', $canonicalIds);
     }
 }
