@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\Public\V1\BrandController as PublicBrandController;
 use App\Http\Controllers\Api\Public\V1\CanonicalProductController as PublicCanonicalProductController;
 use App\Http\Controllers\Api\Public\V1\CategoryController as PublicCategoryController;
+use App\Http\Controllers\Api\Public\V1\FamilyController as PublicFamilyController;
 use App\Http\Controllers\Api\Public\V1\OfferController as PublicOfferController;
 use App\Http\Controllers\Api\V1\BrandController;
 use App\Http\Controllers\Api\V1\CanonicalProductController;
@@ -56,4 +57,14 @@ Route::prefix('public/v1')
 
         Route::get('/canonical-products', [PublicCanonicalProductController::class, 'index']);
         Route::get('/canonical-products/{canonicalProduct}', [PublicCanonicalProductController::class, 'show']);
+
+        // Family-browse: "all variants of (brand, category, size) on
+        // offer right now". A deliberate primitive separate from
+        // canonical_products — see docs/canonicalisation-design.md
+        // §"A note on family-browse". The {key} segment is the
+        // deterministic `brand|category|size_value|size_unit|pack`
+        // tuple; route via `.*` so '|' and Greek characters survive.
+        Route::get('/families', [PublicFamilyController::class, 'index']);
+        Route::get('/families/{key}', [PublicFamilyController::class, 'show'])
+            ->where('key', '.*');
     });

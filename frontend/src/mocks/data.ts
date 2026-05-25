@@ -3,6 +3,8 @@ import type {
   CanonicalOffer,
   CanonicalProductDetail,
   CanonicalProductSummary,
+  FamilyDetail,
+  FamilySummary,
   Offer,
 } from "@/lib/types";
 
@@ -372,3 +374,180 @@ export const mockOffers: Offer[] = (() => {
   }
   return out;
 })();
+
+// ---------------------------------------------------------------------------
+// Families — mock seed for the "browse all Axe 150ml scents" surface. The
+// product call from canonicalisation-design.md §"A note on family-browse"
+// applies: these never canonicalise across chains, but they DO belong in
+// the same family.
+// ---------------------------------------------------------------------------
+
+type FamilyMemberSeed = {
+  brand_slug: string;
+  external_id: string | null;
+  name: string;
+  variant_descriptor: string;
+  price: number;
+  original_price?: number;
+};
+
+type FamilySeed = {
+  manufacturer_brand: string;
+  category: string;
+  size_value: number;
+  size_unit: string;
+  pack_count: number;
+  image_url: string | null;
+  members: FamilyMemberSeed[];
+};
+
+const familySeeds: FamilySeed[] = [
+  {
+    manufacturer_brand: "axe",
+    category: "Αποσμητικά σώματος",
+    size_value: 150,
+    size_unit: "ml",
+    pack_count: 1,
+    image_url: null,
+    members: [
+      { brand_slug: "ab",         external_id: "AB-771",  name: "Axe Αποσμητικό Σπρέι Africa 150ml",  variant_descriptor: "africa",  price: 2.50 },
+      { brand_slug: "sklavenitis",external_id: "SK-883",  name: "AXE Αποσμητικό Σπρέι Africa 150ml",  variant_descriptor: "africa",  price: 2.80 },
+      { brand_slug: "ab",         external_id: "AB-772",  name: "Axe Αποσμητικό Σπρέι Marine 150ml",  variant_descriptor: "marine",  price: 2.60 },
+      { brand_slug: "sklavenitis",external_id: "SK-884",  name: "AXE Αποσμητικό Σπρέι Marine 150ml",  variant_descriptor: "marine",  price: 2.70 },
+      { brand_slug: "mymarket",   external_id: "MM-991",  name: "Axe Αποσμητικό Apollo 150ml",         variant_descriptor: "apollo",  price: 2.55 },
+    ],
+  },
+  {
+    manufacturer_brand: "schwarzkopf",
+    category: "Βαφές μαλλιών",
+    size_value: 1,
+    size_unit: "τεμ",
+    pack_count: 1,
+    image_url: null,
+    members: [
+      { brand_slug: "ab",       external_id: "AB-501", name: "Schwarzkopf Palette Νο 4-0 Καστανό",     variant_descriptor: "kastano",   price: 4.20 },
+      { brand_slug: "ab",       external_id: "AB-502", name: "Schwarzkopf Palette Νο 6-0 Ξανθό",       variant_descriptor: "xantho",    price: 4.30 },
+      { brand_slug: "masoutis", external_id: "MA-301", name: "Schwarzkopf Palette Νο 5-0 Καστανό Ανοιχτό", variant_descriptor: "kastano-anoixto", price: 4.50 },
+    ],
+  },
+];
+
+function buildFamilyKey(seed: FamilySeed): string {
+  return `${seed.manufacturer_brand}|${seed.category.toLowerCase()}|${seed.size_value}|${seed.size_unit}|${seed.pack_count}`;
+}
+
+function buildFamilySummary(seed: FamilySeed): FamilySummary {
+  const prices = seed.members.map((m) => m.price);
+  const min_price = Math.min(...prices);
+  const max_price = Math.max(...prices);
+  const avg_price =
+    Math.round((prices.reduce((a, b) => a + b, 0) / prices.length) * 100) / 100;
+  const cheapestMember = seed.members.reduce((a, b) => (a.price <= b.price ? a : b));
+  const cheapestBrand = brandBySlug(cheapestMember.brand_slug);
+  const distinctBrands = new Set(seed.members.map((m) => m.brand_slug)).size;
+  const titleBrand =
+    seed.manufacturer_brand.charAt(0).toUpperCase() +
+    seed.manufacturer_brand.slice(1);
+  const sized = `${seed.size_value}${seed.size_unit}`;
+  return {
+    key: buildFamilyKey(seed),
+    manufacturer_brand: seed.manufacturer_brand,
+    category: seed.category,
+    size_value: seed.size_value,
+    size_unit: seed.size_unit,
+    pack_count: seed.pack_count,
+    display_name: `${titleBrand} ${seed.category} ${seed.pack_count > 1 ? `${seed.pack_count}×${sized}` : sized}`,
+    image_url: seed.image_url,
+    variants_count: seed.members.length,
+    brands_count: distinctBrands,
+    min_price,
+    max_price,
+    avg_price,
+    cheapest_brand: {
+      id: cheapestBrand.id,
+      name: cheapestBrand.name,
+      slug: cheapestBrand.slug,
+    },
+  };
+}
+
+function buildFamilyDetail(seed: FamilySeed): FamilyDetail {
+  const summary = buildFamilySummary(seed);
+  let nextProductId = 9000;
+  let nextOfferId = 90000;
+
+  // Group seeded members by descriptor so the mock mirrors the
+  // backend's `/families/{key}` shape (one variant per descriptor with
+  // per-chain offers nested).
+  const byDescriptor = new Map<string, FamilyMemberSeed[]>();
+  for (const m of seed.members) {
+    const key = m.variant_descriptor;
+    const existing = byDescriptor.get(key) ?? [];
+    existing.push(m);
+    byDescriptor.set(key, existing);
+  }
+
+  const variants = Array.from(byDescriptor.entries()).map(([descriptor, members]) => {
+    const products = members
+      .map((m) => {
+        const brand = brandBySlug(m.brand_slug);
+        const original = m.original_price ?? null;
+        const discount_pct =
+          original && original > m.price
+            ? Math.round(((original - m.price) / original) * 100)
+            : null;
+        return {
+          id: nextProductId++,
+          external_id: m.external_id,
+          name: m.name,
+          url: null,
+          image_url: null,
+          brand,
+          offer: {
+            id: nextOfferId++,
+            price: m.price,
+            original_price: original,
+            discount_pct,
+            valid_from: "2026-05-25",
+            valid_to: "2026-06-10",
+            scraped_at: "2026-05-25T08:00:00Z",
+          },
+        };
+      })
+      .sort((a, b) => (a.offer?.price ?? 0) - (b.offer?.price ?? 0));
+
+    const prices = products
+      .map((p) => p.offer?.price ?? null)
+      .filter((p): p is number => p !== null);
+
+    return {
+      variant_descriptor: descriptor,
+      products,
+      min_price: prices.length ? Math.min(...prices) : null,
+      max_price: prices.length ? Math.max(...prices) : null,
+      cheapest_brand:
+        products.length > 0 && products[0].offer !== null
+          ? {
+              id: products[0].brand.id,
+              name: products[0].brand.name,
+              slug: products[0].brand.slug,
+            }
+          : null,
+    };
+  });
+
+  variants.sort((a, b) => (a.min_price ?? Infinity) - (b.min_price ?? Infinity));
+
+  return {
+    ...summary,
+    category_normalised: seed.category.toLowerCase(),
+    variants,
+  };
+}
+
+export const mockFamilies: FamilySummary[] = familySeeds.map(buildFamilySummary);
+
+export const mockFamilyDetails: Record<string, FamilyDetail> =
+  Object.fromEntries(
+    familySeeds.map((seed) => [buildFamilyKey(seed), buildFamilyDetail(seed)]),
+  );

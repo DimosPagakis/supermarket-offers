@@ -195,3 +195,90 @@ export type CanonicalQuery = {
   page?: number;
   per_page?: number;
 };
+
+// ---------------------------------------------------------------------------
+// Families (browse by manufacturer + category + size, irrespective of scent /
+// shade / flavour). Mirrors GET /api/public/v1/families[/{key}] — see
+// docs/canonicalisation-design.md §"A note on family-browse".
+// ---------------------------------------------------------------------------
+
+export type FamilyCheapestBrand = {
+  id: number;
+  name: string;
+  slug: string;
+};
+
+export type FamilySummary = {
+  key: string;
+  manufacturer_brand: string;
+  category: string | null;
+  size_value: number | null;
+  size_unit: string | null;
+  pack_count: number;
+  display_name: string;
+  image_url: string | null;
+  variants_count: number;
+  brands_count: number;
+  min_price: number | null;
+  max_price: number | null;
+  avg_price: number | null;
+  cheapest_brand: FamilyCheapestBrand | null;
+};
+
+export type FamilyVariantProduct = {
+  id: number;
+  external_id: string | null;
+  name: string;
+  url: string | null;
+  image_url: string | null;
+  brand: Brand;
+  offer: {
+    id: number;
+    price: number | null;
+    original_price: number | null;
+    discount_pct: number | null;
+    promo_label?: string | null;
+    promo_type?: PromoType | null;
+    valid_from: string | null;
+    valid_to: string | null;
+    scraped_at: string;
+  } | null;
+};
+
+export type FamilyVariant = {
+  variant_descriptor: string;
+  products: FamilyVariantProduct[];
+  min_price: number | null;
+  max_price: number | null;
+  cheapest_brand: FamilyCheapestBrand | null;
+};
+
+export type FamilyDetail = FamilySummary & {
+  category_normalised: string | null;
+  variants: FamilyVariant[];
+};
+
+export type FamiliesPage = {
+  data: FamilySummary[];
+  meta: PageMeta;
+  links: PageLinks;
+};
+
+export type FamilySortField =
+  | "variants_count"
+  | "brands_count"
+  | "min_price"
+  | "avg_price";
+
+export type FamilyQuery = {
+  q?: string;
+  brand?: string[];
+  manufacturer?: string;
+  category?: string;
+  min_variants?: number;
+  min_brands?: number;
+  sort?: FamilySortField;
+  dir?: SortDir;
+  page?: number;
+  per_page?: number;
+};

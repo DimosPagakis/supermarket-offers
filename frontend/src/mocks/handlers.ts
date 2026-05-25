@@ -4,6 +4,10 @@ import type {
   CanonicalProductSummary,
   CanonicalProductsPage,
   CanonicalQuery,
+  FamiliesPage,
+  FamilyDetail,
+  FamilyQuery,
+  FamilySummary,
   Offer,
   OfferQuery,
   OfferWithHistory,
@@ -14,6 +18,8 @@ import {
   mockCanonicalDetails,
   mockCanonicalProducts,
   mockCategories,
+  mockFamilies,
+  mockFamilyDetails,
   mockOffers,
 } from "./data";
 
@@ -137,6 +143,16 @@ export const mockApi = {
     }
     return Promise.resolve(found);
   },
+  families(q: FamilyQuery = {}): Promise<FamiliesPage> {
+    return Promise.resolve(paginateFamilies(applyFamilyFilters(mockFamilies, q), q));
+  },
+  family(key: string): Promise<FamilyDetail> {
+    const found = mockFamilyDetails[key];
+    if (!found) {
+      return Promise.reject(new Error(`family ${key} not found`));
+    }
+    return Promise.resolve(found);
+  },
 };
 
 // ---------------------------------------------------------------------------
@@ -194,6 +210,96 @@ function paginateCanonical(
   const start = (page - 1) * per_page;
   const data = list.slice(start, start + per_page);
   const base = "/api/public/v1/canonical-products";
+  const link = (p: number | null) =>
+    p == null ? null : `${base}?page=${p}&per_page=${per_page}`;
+  return {
+    data,
+    meta: { current_page: page, per_page, total, last_page },
+    links: {
+      first: link(1)!,
+      last: link(last_page)!,
+      next: page < last_page ? link(page + 1) : null,
+      prev: page > 1 ? link(page - 1) : null,
+      self: link(page)!,
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Family mock helpers — semantics mirror the backend
+// FamilyController#index: filter, sort by aggregate or price, paginate.
+// ---------------------------------------------------------------------------
+
+function applyFamilyFilters(
+  items: FamilySummary[],
+  q: FamilyQuery,
+): FamilySummary[] {
+  let list = items;
+  if (q.q) {
+    const needle = q.q.toLowerCase();
+    list = list.filter((f) => f.display_name.toLowerCase().includes(needle));
+  }
+  if (q.manufacturer) {
+    const needle = q.manufacturer.toLowerCase();
+    list = list.filter((f) => f.manufacturer_brand.toLowerCase() === needle);
+  }
+  if (q.category) {
+    list = list.filter((f) => f.category === q.category);
+  }
+  if (q.brand?.length) {
+    const set = new Set(q.brand);
+    list = list.filter((f) => {
+      const detail = mockFamilyDetails[f.key];
+      if (!detail) {
+        return f.cheapest_brand ? set.has(f.cheapest_brand.slug) : false;
+      }
+      return detail.variants.some((v) =>
+        v.products.some((p) => set.has(p.brand.slug)),
+      );
+    });
+  }
+  const minVariants = q.min_variants ?? 2;
+  list = list.filter((f) => f.variants_count >= minVariants);
+  const minBrands = q.min_brands ?? 1;
+  list = list.filter((f) => f.brands_count >= minBrands);
+
+  const sort = q.sort ?? "variants_count";
+  const dir = q.dir ?? "desc";
+  const mult = dir === "asc" ? 1 : -1;
+  list = [...list].sort((a, b) => {
+    const av =
+      sort === "min_price"
+        ? a.min_price ?? Infinity
+        : sort === "avg_price"
+          ? a.avg_price ?? Infinity
+          : sort === "brands_count"
+            ? a.brands_count
+            : a.variants_count;
+    const bv =
+      sort === "min_price"
+        ? b.min_price ?? Infinity
+        : sort === "avg_price"
+          ? b.avg_price ?? Infinity
+          : sort === "brands_count"
+            ? b.brands_count
+            : b.variants_count;
+    if (av === bv) return 0;
+    return av > bv ? mult : -mult;
+  });
+  return list;
+}
+
+function paginateFamilies(
+  list: FamilySummary[],
+  q: FamilyQuery,
+): FamiliesPage {
+  const per_page = Math.min(q.per_page ?? 24, 100);
+  const page = q.page ?? 1;
+  const total = list.length;
+  const last_page = Math.max(1, Math.ceil(total / per_page));
+  const start = (page - 1) * per_page;
+  const data = list.slice(start, start + per_page);
+  const base = "/api/public/v1/families";
   const link = (p: number | null) =>
     p == null ? null : `${base}?page=${p}&per_page=${per_page}`;
   return {

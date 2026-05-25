@@ -7,6 +7,8 @@
 import type {
   CanonicalQuery,
   CanonicalSortField,
+  FamilyQuery,
+  FamilySortField,
   OfferQuery,
   SortDir,
   SortField,
@@ -132,6 +134,79 @@ export function parseCanonicalQuery(params: Raw): CanonicalQuery {
     if (Number.isFinite(n) && n > 0) out.per_page = Math.min(Math.floor(n), 100);
   }
   return out;
+}
+
+// ---------------------------------------------------------------------------
+// Family query
+// ---------------------------------------------------------------------------
+
+export function parseFamilyQuery(params: Raw): FamilyQuery {
+  const out: FamilyQuery = {};
+
+  const q = firstString(params.q);
+  if (q) out.q = q;
+
+  const brand = csv(params.brand);
+  if (brand) out.brand = brand;
+
+  const manufacturer = firstString(params.manufacturer);
+  if (manufacturer) out.manufacturer = manufacturer;
+
+  const category = firstString(params.category);
+  if (category) out.category = category;
+
+  const minVariants = firstString(params.min_variants);
+  if (minVariants != null && minVariants !== "") {
+    const n = Number(minVariants);
+    if (Number.isFinite(n) && n >= 1 && n <= 200) out.min_variants = Math.floor(n);
+  }
+
+  const minBrands = firstString(params.min_brands);
+  if (minBrands != null && minBrands !== "") {
+    const n = Number(minBrands);
+    if (Number.isFinite(n) && n >= 1 && n <= 10) out.min_brands = Math.floor(n);
+  }
+
+  const sort = firstString(params.sort);
+  if (
+    sort === "variants_count" ||
+    sort === "brands_count" ||
+    sort === "min_price" ||
+    sort === "avg_price"
+  ) {
+    out.sort = sort as FamilySortField;
+  }
+  const dir = firstString(params.dir);
+  if (dir === "asc" || dir === "desc") out.dir = dir as SortDir;
+
+  const page = firstString(params.page);
+  if (page) {
+    const n = Number(page);
+    if (Number.isFinite(n) && n > 0) out.page = Math.floor(n);
+  }
+  const perPage = firstString(params.per_page);
+  if (perPage) {
+    const n = Number(perPage);
+    if (Number.isFinite(n) && n > 0) out.per_page = Math.min(Math.floor(n), 100);
+  }
+  return out;
+}
+
+export function toFamilySearchString(q: FamilyQuery): string {
+  const sp = new URLSearchParams();
+  if (q.q) sp.set("q", q.q);
+  if (q.brand?.length) sp.set("brand", q.brand.join(","));
+  if (q.manufacturer) sp.set("manufacturer", q.manufacturer);
+  if (q.category) sp.set("category", q.category);
+  if (typeof q.min_variants === "number")
+    sp.set("min_variants", String(q.min_variants));
+  if (typeof q.min_brands === "number")
+    sp.set("min_brands", String(q.min_brands));
+  if (q.sort) sp.set("sort", q.sort);
+  if (q.dir) sp.set("dir", q.dir);
+  if (q.page && q.page > 1) sp.set("page", String(q.page));
+  if (q.per_page) sp.set("per_page", String(q.per_page));
+  return sp.toString();
 }
 
 export function toCanonicalSearchString(q: CanonicalQuery): string {
