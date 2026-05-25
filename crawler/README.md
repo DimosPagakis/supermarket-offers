@@ -114,7 +114,7 @@ against real HTML and add fixtures.
 | Lidl Hellas      | Implemented    | Static HTML — Scrapy only                      |
 | AB Vassilopoulos | TODO           | Static HTML — Scrapy only                      |
 | Masoutis         | TODO           | JS-heavy — needs `scrapy-playwright`           |
-| Sklavenitis      | TODO           | JS-heavy — needs `scrapy-playwright`           |
+| Sklavenitis      | Implemented    | Akamai-gated — `curl_cffi` (Chrome JA3 impersonation), static HTML |
 | Bazaar           | TODO           | Static HTML                                    |
 | My Market        | TODO           | TBD                                            |
 

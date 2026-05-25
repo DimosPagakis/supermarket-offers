@@ -13,6 +13,11 @@ dependencies = [
     "python-dotenv>=1.0,<2.0",
     "loguru>=0.7,<0.8",
     "tenacity>=8.2,<9.0",
+    # curl_cffi is used by the Sklavenitis spider, which fronts
+    # Akamai Bot Manager. The library wraps libcurl-impersonate so
+    # outbound requests carry a real Chrome JA3 / HTTP2 fingerprint —
+    # plain urllib3 / httpx are 403'd at the edge.
+    "curl_cffi>=0.15,<1.0",
 ]
 
 [project.optional-dependencies]
