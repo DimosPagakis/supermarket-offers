@@ -56,6 +56,7 @@ class CrawlRunOffersTest extends ApiTestCase
                     'external_id' => null,
                     'name' => 'Γάλα Φρέσκο 1λ',
                     'price' => 1.49,
+                    'original_price' => 1.89,
                     'currency' => 'EUR',
                     'scraped_at' => '2026-05-25T08:00:00Z',
                 ],
@@ -87,6 +88,9 @@ class CrawlRunOffersTest extends ApiTestCase
                     'external_id' => 'SKU-42',
                     'name' => 'Καφές Αλεσμένος 250γρ',
                     'price' => 3.20,
+                    'discount_pct' => 15,
+                    'promo_label' => '-15%',
+                    'promo_type' => 'strikethrough',
                     'currency' => 'EUR',
                     'scraped_at' => '2026-05-25T08:00:00Z',
                 ],
@@ -95,6 +99,7 @@ class CrawlRunOffersTest extends ApiTestCase
                     'external_id' => null,
                     'name' => 'Ψωμί Ολικής 500γρ',
                     'price' => 1.10,
+                    'original_price' => 1.40,
                     'currency' => 'EUR',
                     'scraped_at' => '2026-05-25T08:00:00Z',
                 ],
@@ -168,6 +173,7 @@ class CrawlRunOffersTest extends ApiTestCase
                 [
                     'name' => 'Late Arrival',
                     'price' => 1.00,
+                    'discount_pct' => 10,
                     'currency' => 'EUR',
                     'scraped_at' => '2026-05-25T08:00:00Z',
                 ],
@@ -187,6 +193,7 @@ class CrawlRunOffersTest extends ApiTestCase
                 [
                     'name' => 'Time Traveller',
                     'price' => 1.00,
+                    'discount_pct' => 5,
                     'currency' => 'EUR',
                     'valid_from' => '2026-06-10',
                     'valid_to' => '2026-06-01',
@@ -259,10 +266,13 @@ class CrawlRunOffersTest extends ApiTestCase
         $this->assertSame(0, Offer::query()->where('crawl_run_id', $run->id)->count());
     }
 
-    public function test_omitting_promo_fields_remains_valid_for_back_compat(): void
+    public function test_legacy_strikethrough_payload_without_promo_label_persists(): void
     {
-        // Pre-promo-label clients send no promo_label / promo_type at all.
-        // Their payloads must still validate and persist as null.
+        // Pre-promo-label clients (and the Lidl / Masoutis parsers' legacy
+        // path) send `original_price` + `discount_pct` but no `promo_label`
+        // / `promo_type`. The defensive promo-signal validator accepts
+        // them because `discount_pct > 0` is already a real signal, and
+        // the unset promo_* fields persist as null for back-compat.
         $this->authedAsCrawler();
         $run = $this->makeRun();
 
@@ -271,6 +281,8 @@ class CrawlRunOffersTest extends ApiTestCase
                 [
                     'name' => 'Legacy Client Item',
                     'price' => 2.50,
+                    'original_price' => 3.00,
+                    'discount_pct' => 17,
                     'currency' => 'EUR',
                     'scraped_at' => '2026-05-25T08:00:00Z',
                 ],
@@ -280,6 +292,88 @@ class CrawlRunOffersTest extends ApiTestCase
         $offer = Offer::query()->where('crawl_run_id', $run->id)->firstOrFail();
         $this->assertNull($offer->promo_label);
         $this->assertNull($offer->promo_type);
+    }
+
+    public function test_offer_without_any_promo_signal_is_rejected(): void
+    {
+        // Defensive backstop (2026-05-25): the controller refuses to
+        // persist a "catalogue leak" row — one with no discount_pct,
+        // no promo_label, and original_price <= price. Even if a parser
+        // bug emits a bare catalogue row, the backend now stops it.
+        $this->authedAsCrawler();
+        $run = $this->makeRun();
+
+        $response = $this->postJson("/api/v1/crawl-runs/{$run->id}/offers", [
+            'offers' => [
+                [
+                    'name' => 'Plain Catalogue Item',
+                    'price' => 4.50,
+                    // None of the three promo signals are present:
+                    'original_price' => null,
+                    'discount_pct' => null,
+                    'promo_label' => null,
+                    'currency' => 'EUR',
+                    'scraped_at' => '2026-05-25T08:00:00Z',
+                ],
+            ],
+        ])->assertUnprocessable()->assertJsonValidationErrors('offers.0');
+
+        // Error envelope: ``errors`` is keyed by dotted path, so the key
+        // is literally "offers.0" not the nested {offers:{0:[]}}.
+        $errors = $response->json('errors');
+        $this->assertNotEmpty($errors);
+        $this->assertArrayHasKey('offers.0', $errors);
+        $this->assertStringContainsString('promo signal', $errors['offers.0'][0]);
+
+        $this->assertSame(0, Offer::query()->where('crawl_run_id', $run->id)->count());
+    }
+
+    public function test_equal_prices_do_not_count_as_promo_signal(): void
+    {
+        // Edge case: original_price == price is not a strikethrough. The
+        // validator must require the inequality, not just non-null.
+        $this->authedAsCrawler();
+        $run = $this->makeRun();
+
+        $this->postJson("/api/v1/crawl-runs/{$run->id}/offers", [
+            'offers' => [
+                [
+                    'name' => 'Equal Prices Item',
+                    'price' => 2.00,
+                    'original_price' => 2.00,
+                    'discount_pct' => 0,
+                    'promo_label' => null,
+                    'currency' => 'EUR',
+                    'scraped_at' => '2026-05-25T08:00:00Z',
+                ],
+            ],
+        ])->assertUnprocessable()->assertJsonValidationErrors('offers.0');
+    }
+
+    public function test_promo_label_alone_satisfies_the_signal_check(): void
+    {
+        // A non-blank promo_label is sufficient (mirrors AB's BXG% /
+        // BXGY / Sklavenitis's gift-badge emit paths where price stays
+        // at the regular shelf value).
+        $this->authedAsCrawler();
+        $run = $this->makeRun();
+
+        $this->postJson("/api/v1/crawl-runs/{$run->id}/offers", [
+            'offers' => [
+                [
+                    'name' => 'Label-only Promo',
+                    'price' => 5.27,
+                    'original_price' => null,
+                    'discount_pct' => null,
+                    'promo_label' => '4+2 Δώρο',
+                    'promo_type' => 'bxgy_free',
+                    'currency' => 'EUR',
+                    'scraped_at' => '2026-05-25T08:00:00Z',
+                ],
+            ],
+        ])->assertCreated();
+
+        $this->assertSame(1, Offer::query()->where('crawl_run_id', $run->id)->count());
     }
 
     public function test_transaction_rolls_back_on_resolver_exception(): void
@@ -313,12 +407,14 @@ class CrawlRunOffersTest extends ApiTestCase
                 [
                     'name' => 'First',
                     'price' => 1.00,
+                    'discount_pct' => 10,
                     'currency' => 'EUR',
                     'scraped_at' => '2026-05-25T08:00:00Z',
                 ],
                 [
                     'name' => 'Second',
                     'price' => 2.00,
+                    'discount_pct' => 20,
                     'currency' => 'EUR',
                     'scraped_at' => '2026-05-25T08:00:00Z',
                 ],

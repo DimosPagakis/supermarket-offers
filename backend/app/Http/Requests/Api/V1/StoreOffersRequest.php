@@ -24,6 +24,11 @@ class StoreOffersRequest extends FormRequest
      *    bug on the crawler side and we reject it loudly.
      *  - Per-offer valid_to must be on or after valid_from when both are
      *    present.
+     *  - Every offer MUST carry at least one promo signal — a positive
+     *    discount_pct, a non-null promo_label, or an original_price
+     *    strictly above price. Defensive backstop: parsers are gated
+     *    too, but a buggy parser must not be able to seed the chain
+     *    catalogue into the public /offers feed. See backend CLAUDE.md.
      *
      * We deliberately keep the per-offer ruleset permissive about
      * external_id (nullable). Some chains expose stable SKUs, others
@@ -64,7 +69,7 @@ class StoreOffersRequest extends FormRequest
                 );
             }
 
-            // Per-offer date sanity: valid_to >= valid_from when both given.
+            // Per-offer date sanity + promo-signal requirement.
             $offers = $this->input('offers', []);
             if (! is_array($offers)) {
                 return;
@@ -78,7 +83,54 @@ class StoreOffersRequest extends FormRequest
                         'valid_to must be on or after valid_from.',
                     );
                 }
+
+                if (! $this->offerCarriesPromoSignal($offer)) {
+                    $v->errors()->add(
+                        "offers.{$i}",
+                        'must carry a real promo signal (discount_pct>0, promo_label, or original_price>price).',
+                    );
+                }
             }
         });
+    }
+
+    /**
+     * Return true iff an offer payload carries at least one observable
+     * promo signal.
+     *
+     * Accepted signals (any one suffices):
+     *  - `discount_pct` numeric and > 0,
+     *  - `promo_label` non-null and non-blank (the brand-supplied pill
+     *    text, e.g. "1+1 δώρο", "-30%", "ΠΡΟΣΦΟΡΑ"),
+     *  - `original_price` numeric AND strictly > `price` (a real
+     *    strikethrough — equal prices don't count).
+     *
+     * Defensive gate against catalogue-leak rows. Mirrors the per-brand
+     * parser gates in `crawler/scraper/parsers/*.py`; documented in
+     * backend/CLAUDE.md.
+     */
+    protected function offerCarriesPromoSignal(array $offer): bool
+    {
+        $discountPct = $offer['discount_pct'] ?? null;
+        if (is_numeric($discountPct) && (int) $discountPct > 0) {
+            return true;
+        }
+
+        $promoLabel = $offer['promo_label'] ?? null;
+        if (is_string($promoLabel) && trim($promoLabel) !== '') {
+            return true;
+        }
+
+        $price = $offer['price'] ?? null;
+        $originalPrice = $offer['original_price'] ?? null;
+        if (
+            is_numeric($price)
+            && is_numeric($originalPrice)
+            && (float) $originalPrice > (float) $price
+        ) {
+            return true;
+        }
+
+        return false;
     }
 }
