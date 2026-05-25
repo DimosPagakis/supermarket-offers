@@ -8,6 +8,7 @@ use App\Http\Resources\Public\CanonicalProductDetailResource;
 use App\Http\Resources\Public\CanonicalProductListResource;
 use App\Models\CanonicalProduct;
 use App\Models\Offer;
+use App\Support\StringNormalizer;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Resources\Json\ResourceCollection;
 use Illuminate\Support\Carbon;
@@ -52,16 +53,9 @@ class CanonicalProductController extends Controller
         }
 
         if (isset($filters['category']) && $filters['category'] !== '') {
-            // Same case-insensitive variant trick as the offers
-            // endpoint — SQLite's LOWER() is ASCII-only.
-            $category = $filters['category'];
-            $variants = array_values(array_unique([
-                $category,
-                mb_strtolower($category, 'UTF-8'),
-                mb_strtoupper($category, 'UTF-8'),
-                mb_convert_case($category, MB_CASE_TITLE, 'UTF-8'),
-            ]));
-            $query->whereIn('category', $variants);
+            // Case-insensitive match across Greek casing variants — see
+            // StringNormalizer::caseVariants() for the why-not-LOWER().
+            $query->whereIn('category', StringNormalizer::caseVariants($filters['category']));
         }
 
         if (isset($filters['brand']) && $filters['brand'] !== '') {

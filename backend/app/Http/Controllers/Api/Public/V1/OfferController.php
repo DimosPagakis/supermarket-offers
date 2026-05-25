@@ -137,19 +137,9 @@ class OfferController extends Controller
         }
 
         if (isset($filters['category']) && $filters['category'] !== '') {
-            // Case-insensitive exact match across casing variants. SQLite's
-            // LOWER() is ASCII-only and so it can't lowercase Greek
-            // characters; we sidestep that by enumerating the caller's
-            // input in original, lower, and upper variants. Categories
-            // are a curated set (~tens of values), so this is cheap.
-            $category = $filters['category'];
-            $variants = array_values(array_unique([
-                $category,
-                mb_strtolower($category, 'UTF-8'),
-                mb_strtoupper($category, 'UTF-8'),
-                mb_convert_case($category, MB_CASE_TITLE, 'UTF-8'),
-            ]));
-            $query->whereIn('products.category', $variants);
+            // Case-insensitive exact match across Greek casing variants —
+            // SQLite's LOWER() is ASCII-only so we enumerate explicitly.
+            $query->whereIn('products.category', StringNormalizer::caseVariants($filters['category']));
         }
 
         if (isset($filters['min_discount'])) {

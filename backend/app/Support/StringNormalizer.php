@@ -35,4 +35,26 @@ class StringNormalizer
 
         return trim($name);
     }
+
+    /**
+     * Enumerate case variants of a Greek-aware string so case-insensitive
+     * comparisons survive SQLite's ASCII-only LOWER().
+     *
+     * Returns the original, lowercase, uppercase and title-case forms
+     * with duplicates removed. Callers use the result with `whereIn` to
+     * match a column value against any casing the caller might supply.
+     * Categories are a curated set (~tens of values), so the cost of a
+     * 1–4 element IN-list is negligible.
+     *
+     * @return array<int, string>
+     */
+    public static function caseVariants(string $value): array
+    {
+        return array_values(array_unique([
+            $value,
+            mb_strtolower($value, 'UTF-8'),
+            mb_strtoupper($value, 'UTF-8'),
+            mb_convert_case($value, MB_CASE_TITLE, 'UTF-8'),
+        ]));
+    }
 }
