@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Api\V1;
 
+use App\Domain\Canonical\MatchMethod;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -44,7 +45,7 @@ class BulkUpsertCanonicalProductsRequest extends FormRequest
             'groupings.*.members.*.confidence' => ['required', 'numeric', 'min:0', 'max:1'],
             'groupings.*.members.*.match_method' => [
                 'required',
-                Rule::in(['rule', 'embedding', 'llm', 'manual']),
+                Rule::enum(MatchMethod::class),
             ],
         ];
     }
