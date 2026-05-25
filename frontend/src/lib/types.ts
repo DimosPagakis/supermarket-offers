@@ -28,11 +28,34 @@ export type Product = {
   canonical_product_id?: number | null;
 };
 
+/**
+ * Structured kind of a non-trivial promotion. Mirrors the backend
+ * `Offer::PROMO_TYPES` enum. Use this for branching UI / filter logic;
+ * use `promo_label` for display copy.
+ */
+export type PromoType =
+  | "strikethrough"
+  | "bxgy_free"
+  | "bxg_percent"
+  | "discount_euros"
+  | "loyalty_points";
+
 export type Offer = {
   id: number;
   price: number;
   original_price: number | null;
   discount_pct: number | null;
+  /**
+   * Brand-supplied Greek badge text (e.g. "1+1 δώρο", "-30% στα 2",
+   * "Κέρδος 15%"). Optional — pre-promo-label API versions and brands
+   * without rich promo metadata return null. Render verbatim; prefer
+   * this over `discount_pct` when both are set.
+   */
+  promo_label?: string | null;
+  /**
+   * Structured promo kind. Optional for back-compat with old payloads.
+   */
+  promo_type?: PromoType | null;
   currency: string;
   valid_from: string | null;
   valid_to: string | null;
@@ -131,6 +154,8 @@ export type CanonicalOffer = {
     price: number;
     original_price: number | null;
     discount_pct: number | null;
+    promo_label?: string | null;
+    promo_type?: PromoType | null;
     valid_from: string | null;
     valid_to: string | null;
     scraped_at: string;

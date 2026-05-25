@@ -32,10 +32,30 @@ function isEndingSoon(validity: string): boolean {
  * the same line, separated by · and ellipsis-truncated at row level.
  */
 export function OfferCard({ offer, priority = false }: Props) {
-  const { product, brand, price, original_price, discount_pct, valid_to, currency } = offer;
+  const {
+    product,
+    brand,
+    price,
+    original_price,
+    discount_pct,
+    promo_label,
+    valid_to,
+    currency,
+  } = offer;
   const validity = formatValidity(valid_to);
   const expired = validity === "Έληξε";
   const endingSoon = !expired && isEndingSoon(validity);
+
+  // Promo-pill copy. Brand-supplied `promo_label` always wins when set —
+  // it's the verbatim Greek badge ("1+1 δώρο", "Κέρδος 15%") the shopper
+  // sees on the brand's own page, and is more precise than our
+  // reconstructed "-N%" when both are present. Fall back to the numeric
+  // pct for legacy data that pre-dates the promo_label column.
+  const promoBadge: string | null = promo_label
+    ? promo_label
+    : discount_pct != null && discount_pct > 0
+      ? `-${discount_pct}%`
+      : null;
 
   return (
     <Link
@@ -58,9 +78,9 @@ export function OfferCard({ offer, priority = false }: Props) {
             <span aria-hidden>🛒</span>
           </div>
         )}
-        {discount_pct != null && discount_pct > 0 && (
+        {promoBadge && (
           <span className="absolute right-2 top-2 rounded-full bg-accent px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-white">
-            -{discount_pct}%
+            {promoBadge}
           </span>
         )}
       </div>

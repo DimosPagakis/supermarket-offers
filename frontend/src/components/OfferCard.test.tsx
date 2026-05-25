@@ -74,6 +74,59 @@ describe("OfferCard", () => {
     expect(badge.className).toMatch(/\btext-white\b/);
   });
 
+  it("renders promo_label verbatim when set, overriding the raw -N% pill", () => {
+    // Repro case: AB's "1+1 δώρο" deal. The offer carries no
+    // discount_pct (the multi-buy maths is left to the consumer) but
+    // does carry the brand's badge copy. We must render the label.
+    render(
+      <OfferCard
+        offer={{
+          ...baseOffer,
+          original_price: null,
+          discount_pct: null,
+          promo_label: "1+1 δώρο",
+          promo_type: "bxgy_free",
+        }}
+      />,
+    );
+    const badge = screen.getByText("1+1 δώρο");
+    expect(badge.className).toMatch(/\bbg-accent\b/);
+    expect(badge.className).toMatch(/\btext-white\b/);
+    // The numeric pill must NOT also render — promo_label takes priority.
+    expect(screen.queryByText(/^-\d+%$/)).not.toBeInTheDocument();
+  });
+
+  it("prefers promo_label over discount_pct when both are present", () => {
+    // SHT offers carry both. Brand-supplied copy ("Κέρδος 15%") is more
+    // precise than our reconstructed "-15%".
+    render(
+      <OfferCard
+        offer={{
+          ...baseOffer,
+          discount_pct: 15,
+          promo_label: "Κέρδος 15%",
+          promo_type: "strikethrough",
+        }}
+      />,
+    );
+    expect(screen.getByText("Κέρδος 15%")).toBeInTheDocument();
+    expect(screen.queryByText("-15%")).not.toBeInTheDocument();
+  });
+
+  it("falls back to -N% when promo_label is null but discount_pct is set", () => {
+    // Pre-promo-label API response: promo_label undefined / null,
+    // discount_pct still present. The legacy pill must still render.
+    render(
+      <OfferCard
+        offer={{
+          ...baseOffer,
+          promo_label: null,
+        }}
+      />,
+    );
+    expect(screen.getByText("-30%")).toBeInTheDocument();
+  });
+
   it("uses the neumorphism raised surface on the card root", () => {
     // Regression guard for the neumorphism layer: the card sits on the
     // shared canvas (no tinted surface, no border) and carries the raised
