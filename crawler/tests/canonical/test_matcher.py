@@ -69,6 +69,33 @@ def test_nirvana_flavour_mismatch_not_same() -> None:
     assert "variant" in d.reason.lower() or "jaccard" in d.reason.lower()
 
 
+def test_disjoint_variant_tokens_reject_with_full_confidence() -> None:
+    """Phase 2.1 regression: when two products share brand+size+pack but
+    their variant token sets are non-empty and *disjoint*, the matcher
+    must REJECT with confidence 1.0 — not produce the old ambiguous 0.6
+    that leaks into the embedding fallback band and over-merges
+    boilerplate-heavy families (Axe deodorants, Ariel pods, …)."""
+    a = _f(1, "sklavenitis", "Nirvana Vanilla 420ml")
+    b = _f(2, "masoutis", "Nirvana Strawberry 420ml")
+    # Sanity: same brand+size+pack (the block key), disjoint variant
+    # tokens after boilerplate stripping. The fixture only holds if the
+    # extractor keeps "vanilla" / "strawberry" as the discriminator.
+    assert a.manufacturer == b.manufacturer
+    assert a.size == b.size
+    assert a.pack == b.pack
+    assert a.variant_tokens and b.variant_tokens
+    assert not (a.variant_tokens & b.variant_tokens), (
+        f"fixture invalid — token sets must be disjoint, got "
+        f"{a.variant_tokens} vs {b.variant_tokens}"
+    )
+
+    d = match_decision(a, b)
+    assert d.same is False
+    assert d.confidence == 1.0
+    assert "disjoint" in d.reason.lower()
+    assert d.method == "rule"
+
+
 def test_base_sku_with_empty_variant_matches() -> None:
     """When both products strip down to nothing (same brand+size+pack and
     no descriptors), we treat them as a confident match."""

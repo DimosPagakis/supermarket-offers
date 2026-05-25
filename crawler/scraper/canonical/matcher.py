@@ -10,10 +10,18 @@ Contract (also used as the design-doc reference):
   * Brand mismatch → not the same product (confidence 1.0).
   * Size mismatch → not the same product (confidence 1.0).
   * Pack mismatch → not the same product (confidence 1.0).
+  * Both sides have non-empty, **disjoint** variant token sets →
+    distinct SKUs (confidence 1.0). Phase 2.1: disjoint-set pairs must
+    REJECT outright rather than leak into the embedding fallback band.
+    Boilerplate-heavy product names (e.g. ``"Axe Αποσμητικό Σπρέι Marine
+    150ml"`` vs ``"... Africa 150ml"``) otherwise share 5/6 tokens and
+    the embedding model returns cosine ≥0.95 on the shared scaffolding,
+    causing union-find to transitively over-merge a whole flavour
+    family.
   * Same brand+size+pack+variant_tokens → same product, score 0.95..1.0
     depending on variant Jaccard overlap.
-  * Same brand+size+pack but variant_tokens disagree → ambiguous (0.6);
-    caller may escalate to embedding fallback.
+  * Same brand+size+pack but variant_tokens partially overlap →
+    ambiguous (0.6); caller may escalate to embedding fallback.
 """
 
 from __future__ import annotations
@@ -53,6 +61,16 @@ def match_decision(a: ProductFeatures, b: ProductFeatures) -> Decision:
         # Both sides stripped down to nothing (e.g. "Coca-Cola 1.5lt"
         # with no descriptor). Treat as a confident match.
         return Decision(True, 1.0, "no variant tokens — base SKU", "rule")
+
+    # Phase 2.1 disjoint-set guard: if both sides have non-empty variant
+    # token sets and they share *zero* tokens, they are distinct SKUs.
+    # Reject with full confidence so we do not leak into the embedding
+    # fallback band — embeddings cannot recover the one-token
+    # discriminator from boilerplate-heavy Greek product names.
+    if not intersection and a.variant_tokens and b.variant_tokens:
+        return Decision(
+            False, 1.0, "disjoint variants — distinct SKUs", "rule"
+        )
 
     jaccard = len(intersection) / len(union)
 

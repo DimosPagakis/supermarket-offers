@@ -352,9 +352,13 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument(
         "--auto-merge-cosine",
         type=float,
-        default=0.95,
+        default=0.97,
         help="Cosine threshold above which an ambiguous pair is auto-merged "
-        "by the embedding fallback. Default 0.95.",
+        "by the embedding fallback. Default 0.97 — raised from 0.95 in "
+        "Phase 2.1 as a belt-and-braces guard against boilerplate-dominated "
+        "Greek product names defeating the cosine signal. Even when the "
+        "rule matcher does pass to embeddings (overlap > 0), require a "
+        "higher cosine to auto-merge.",
     )
     p.add_argument(
         "--review-cosine",

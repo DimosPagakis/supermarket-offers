@@ -7,6 +7,7 @@ use App\Models\CanonicalProduct;
 use App\Models\Product;
 use App\Support\StringNormalizer;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use RuntimeException;
 
 class CanonicalBulkUpsertTest extends ApiTestCase
@@ -312,6 +313,96 @@ class CanonicalBulkUpsertTest extends ApiTestCase
         $c = CanonicalProduct::where('canonical_key', 'lacta:gofreta:31g:1')->firstOrFail();
         $this->assertSame(3, $c->members_count);
         $this->assertSame(3, $c->brands_count);
+    }
+
+    public function test_duplicate_brand_member_is_skipped_not_fatal(): void
+    {
+        // Phase 2.1 regression: when two same-brand products are pushed
+        // as members of one canonical, the partial unique index on
+        // (canonical_product_id, brand_id) rejects the second one. The
+        // action must log a structured warning, skip the loser, and
+        // surface the count in the response envelope — never bubble.
+        $this->authedAsCrawler();
+        $mm = $this->makeBrand('my-market', 'My Market');
+
+        $p1 = $this->makeProduct($mm, 'Axe Αποσμητικό Σπρέι Marine 150ml');
+        $p2 = $this->makeProduct($mm, 'Axe Αποσμητικό Σπρέι Africa 150ml');
+
+        // Capture log lines emitted by the warning channel.
+        $records = [];
+        Log::listen(function ($message) use (&$records): void {
+            $records[] = $message;
+        });
+
+        $response = $this->postJson('/api/v1/canonical-products/bulk-upsert', [
+            'groupings' => [
+                [
+                    'canonical_key' => 'axe:aposmhtiko-sprei:150ml:1',
+                    'manufacturer_brand' => 'Axe',
+                    'size_value' => 150.0,
+                    'size_unit' => 'ml',
+                    'pack_count' => 1,
+                    'display_name' => 'Axe Αποσμητικό Σπρέι 150ml',
+                    'members' => [
+                        ['product_id' => $p1->id, 'confidence' => 0.95, 'match_method' => 'rule'],
+                        ['product_id' => $p2->id, 'confidence' => 0.95, 'match_method' => 'rule'],
+                    ],
+                ],
+            ],
+        ]);
+
+        // No exception bubbled — request succeeded.
+        $response->assertOk();
+        // (a) One member landed.
+        $response->assertJsonPath('products_assigned', 1);
+        // (c) duplicate_brand_skipped counter is 1.
+        $response->assertJsonPath('duplicate_brand_skipped', 1);
+
+        // (b) The first landed, the second is unassigned. The unique
+        // index can theoretically pick either one as the winner, but
+        // both rows existing in their pre/post state is the invariant
+        // we care about: exactly one product points at the canonical.
+        $p1->refresh();
+        $p2->refresh();
+        $canonical = CanonicalProduct::query()
+            ->where('canonical_key', 'axe:aposmhtiko-sprei:150ml:1')
+            ->firstOrFail();
+        $assignedIds = Product::query()
+            ->where('canonical_product_id', $canonical->id)
+            ->pluck('id')
+            ->all();
+        $this->assertCount(1, $assignedIds);
+        $this->assertContains($assignedIds[0], [$p1->id, $p2->id]);
+
+        // (d) A structured warning was emitted with the right shape.
+        $skipped = array_filter(
+            $records,
+            fn ($r) => is_object($r)
+                && property_exists($r, 'message')
+                && $r->message === 'canonical_bulk_upsert.duplicate_brand_skipped'
+        );
+        $this->assertNotEmpty($skipped, 'expected a duplicate_brand_skipped log line');
+        /** @var object $log */
+        $log = array_values($skipped)[0];
+        $this->assertSame($canonical->id, $log->context['canonical_id']);
+        $this->assertSame($mm->id, $log->context['brand_id']);
+        $this->assertContains(
+            $log->context['skipped_product_id'],
+            [$p1->id, $p2->id]
+        );
+        $this->assertContains(
+            $log->context['existing_product_id'],
+            [$p1->id, $p2->id]
+        );
+        $this->assertNotSame(
+            $log->context['skipped_product_id'],
+            $log->context['existing_product_id']
+        );
+
+        // Canonical aggregates reflect the one member that landed.
+        $canonical->refresh();
+        $this->assertSame(1, $canonical->members_count);
+        $this->assertSame(1, $canonical->brands_count);
     }
 
     public function test_transaction_rolls_back_on_exception(): void

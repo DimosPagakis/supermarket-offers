@@ -548,6 +548,81 @@ products for the "sibling" panel).
 
 ---
 
+## 9. Phase 2.1 — over-merge fix (2026-05-25)
+
+A live audit shortly after the Phase 2 spike landed found that 1,151 /
+1,465 canonical_products (78%) held >1 member from the same brand — a
+clear invariant violation. Sampling:
+
+| Canonical | Symptom |
+|---|---|
+| `axe:africa-aposmhtiko-sprei:150ml:1` | 30 Axe scent variants (Marine, Africa, Apollo, …) collapsed into one |
+| Ariel Pods canonical | 29 distinct My Market product rows merged |
+| Ajax floor cleaner canonical | 18 Masoutis scent variants merged |
+
+### Root cause
+
+Boilerplate-heavy Greek product names ("Axe Αποσμητικό Σπρέι Marine
+150ml" vs "Axe Αποσμητικό Σπρέι Africa 150ml") share 5/6 tokens. The
+rule matcher correctly identified them as ambiguous, but:
+
+1. The `multilingual-e5-small` embedding fallback returned cosine
+   ≥0.95 because the scaffolding dominates — the 1-token discriminator
+   gets swamped.
+2. Union-find inside `(manufacturer, size, pack)` blocks then
+   transitively merged everything in the block via a chain of
+   pairwise-OK edges.
+3. The 0.95 auto-merge threshold gave no headroom.
+
+### What shipped
+
+* **Crawler — `matcher.py`**: when two products share brand+size+pack
+  AND both have non-empty AND completely disjoint variant token sets,
+  REJECT with confidence 1.0. They never reach the embedding fallback.
+  Partial overlap (jaccard 0.25..0.50) still escalates to embeddings —
+  that's the genuine "same SKU, different wording" zone.
+* **Crawler — `grouper.py`**: `max_block_size` default lowered from 60
+  → 8. Blocks above the cap (Axe, Ariel, Ajax families) skip pairwise
+  scoring entirely — each member flows through as a singleton block,
+  exact-canonical_key collisions still cluster downstream. The cap is
+  env-overridable via `CANONICAL_MAX_BLOCK_SIZE=N` so we can re-tune
+  without code change.
+* **Crawler — `canonicalise.py`**: default `--auto-merge-cosine`
+  raised from 0.95 → 0.97. Belt-and-braces. `--review-cosine` stays at
+  0.85.
+* **Backend — migration**: partial unique index
+  `products_canonical_brand_unique` on `(canonical_product_id,
+  brand_id) WHERE canonical_product_id IS NOT NULL`. SQLite-compatible.
+  Unassigned products unconstrained.
+* **Backend — `BulkUpsertCanonicalProducts`**: each member save runs
+  inside a savepoint; on `UniqueConstraintViolationException` the
+  action logs a structured warning (`canonical_id`, `brand_id`,
+  skipped/winner `product_id`), increments a new
+  `duplicate_brand_skipped` counter on `BulkUpsertResult`, and
+  continues. The HTTP envelope now carries `duplicate_brand_skipped`
+  (additive, backwards-compatible).
+
+### Numbers
+
+Counts shifted on the live `:8001` DB after wiping `canonical_products`
+and rerunning `python -m scripts.canonicalise --no-singletons`. See the
+PR description for the exact before/after table. Same-brand
+collisions per canonical: **0** post-fix (the unique index would
+refuse anything else).
+
+### A note on family-browse
+
+The cap deliberately gives up the small recall win on flavour-rich
+families (Axe scents, Nirvana flavours, Ariel pods) in favour of
+precision. The product call from §7 stands: **a canonical product is
+the package, not the family.** If we later want a "see all Axe 150ml
+scents" surface, add a `canonical_product_family_id` column or a
+dedicated `canonical_product_families` table. **Do not** retrofit
+family-browse into `canonical_product_id` — that would re-create the
+exact bug Phase 2.1 just fixed.
+
+---
+
 ### See also
 
 - `crawler/scripts/canon_explore.py` — the read-only helper used to
