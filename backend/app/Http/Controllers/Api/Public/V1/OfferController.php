@@ -1,0 +1,213 @@
+<?php
+
+namespace App\Http\Controllers\Api\Public\V1;
+
+use App\Http\Controllers\Controller;
+use App\Http\Requests\Public\V1\OfferIndexRequest;
+use App\Http\Requests\Public\V1\OfferShowRequest;
+use App\Http\Resources\Public\OfferResource;
+use App\Models\Brand;
+use App\Models\Offer;
+use App\Support\StringNormalizer;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Resources\Json\ResourceCollection;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
+
+class OfferController extends Controller
+{
+    /**
+     * GET /api/public/v1/offers
+     *
+     * Default behaviour:
+     *  - Returns one offer per product — the latest by scraped_at among the
+     *    rows that matched every active filter. We pick the latest with a
+     *    correlated subquery (MAX(id) GROUP BY product_id over the filtered
+     *    set) rather than a window function so the path works identically
+     *    on SQLite and Postgres without raw SQL.
+     *  - `valid_on` defaults to today (server timezone). NULL bounds in
+     *    `valid_from` / `valid_to` are treated as open (always valid).
+     *  - `q` searches against `products.normalized_name` using the same
+     *    Greek-accent-stripping normaliser the crawler ingest path uses,
+     *    so "feta" matches "Φέτα ΠΟΠ".
+     *
+     * Sort order is applied after the latest-per-product collapse. Default
+     * `sort=discount_pct&dir=desc` is the most useful for an offers feed.
+     */
+    public function index(OfferIndexRequest $request, ?Brand $brand = null): ResourceCollection
+    {
+        $filters = $request->validated();
+
+        $brandSlugs = null;
+        if ($brand !== null) {
+            // Route-scoped: /brands/{slug}/offers — fixed to a single brand.
+            $brandSlugs = [$brand->slug];
+        } elseif (isset($filters['brand'])) {
+            $brandSlugs = array_values(array_filter(array_map(
+                'trim',
+                explode(',', (string) $filters['brand']),
+            )));
+        }
+
+        $base = $this->buildFilteredOfferQuery($filters, $brandSlugs);
+
+        // Latest-per-product collapse: pick MAX(id) per product_id over the
+        // filtered set, then re-query offers WHERE id IN (...). Using MAX(id)
+        // (not MAX(scraped_at)) gives us a deterministic single row even
+        // when two offers for the same product share scraped_at; ids are
+        // monotonic so the higher id is the more recently inserted row.
+        $latestIds = (clone $base)
+            ->select(DB::raw('MAX(offers.id) as id'))
+            ->groupBy('offers.product_id');
+
+        $sort = $filters['sort'] ?? 'discount_pct';
+        $dir = $filters['dir'] ?? 'desc';
+        $perPage = (int) ($filters['per_page'] ?? 50);
+        $page = (int) ($filters['page'] ?? 1);
+
+        // discount_pct can be NULL; sort NULLs last on a desc, first on asc
+        // by coercing them to a sentinel via COALESCE so pagination stays
+        // deterministic across pages.
+        $sortExpr = match ($sort) {
+            'price' => 'offers.price',
+            'scraped_at' => 'offers.scraped_at',
+            default => 'COALESCE(offers.discount_pct, 0)',
+        };
+
+        $query = Offer::query()
+            ->with(['product.brand'])
+            ->whereIn('offers.id', $latestIds)
+            ->orderByRaw("{$sortExpr} {$dir}")
+            ->orderBy('offers.id', 'desc'); // tiebreaker for deterministic pagination
+
+        $paginator = $query->paginate(perPage: $perPage, page: $page);
+        $paginator->withQueryString();
+
+        // OfferResource::collection() returns a custom collection class
+        // that adds a `self` link to the framework's standard
+        // first/last/prev/next block — see OfferResourceCollection.
+        return OfferResource::collection($paginator);
+    }
+
+    /**
+     * GET /api/public/v1/offers/{id}
+     *
+     * ?include_history=true attaches the price history for the offer's
+     * product, ordered newest first, capped at 200 entries. The cap keeps
+     * a misbehaving client from forcing the backend to ship megabytes for
+     * a product crawled hourly for a year.
+     */
+    public function show(OfferShowRequest $request, Offer $offer): OfferResource
+    {
+        $offer->load(['product.brand']);
+
+        if ($request->boolean('include_history')) {
+            $history = Offer::query()
+                ->where('product_id', $offer->product_id)
+                ->orderByDesc('scraped_at')
+                ->orderByDesc('id')
+                ->limit(200)
+                ->get(['id', 'price', 'original_price', 'discount_pct', 'currency', 'scraped_at'])
+                ->map(fn (Offer $row) => [
+                    'id' => (int) $row->id,
+                    'price' => $row->price !== null ? (float) $row->price : null,
+                    'original_price' => $row->original_price !== null ? (float) $row->original_price : null,
+                    'discount_pct' => $row->discount_pct !== null ? (int) $row->discount_pct : null,
+                    'currency' => $row->currency,
+                    'scraped_at' => optional($row->scraped_at)->toIso8601String(),
+                ])
+                ->all();
+
+            // Stash on the model so OfferResource can surface it.
+            $offer->additional_history = $history;
+        }
+
+        return new OfferResource($offer);
+    }
+
+    /**
+     * Build the filtered offer query that the latest-per-product subquery
+     * is computed against. Used by both /offers and the brand-scoped sugar.
+     */
+    private function buildFilteredOfferQuery(array $filters, ?array $brandSlugs): Builder
+    {
+        $query = Offer::query()
+            ->from('offers')
+            ->join('products', 'products.id', '=', 'offers.product_id')
+            ->join('brands', 'brands.id', '=', 'products.brand_id')
+            ->where('brands.active', true);
+
+        if ($brandSlugs !== null && $brandSlugs !== []) {
+            $query->whereIn('brands.slug', $brandSlugs);
+        }
+
+        if (isset($filters['category']) && $filters['category'] !== '') {
+            // Case-insensitive exact match across casing variants. SQLite's
+            // LOWER() is ASCII-only and so it can't lowercase Greek
+            // characters; we sidestep that by enumerating the caller's
+            // input in original, lower, and upper variants. Categories
+            // are a curated set (~tens of values), so this is cheap.
+            $category = $filters['category'];
+            $variants = array_values(array_unique([
+                $category,
+                mb_strtolower($category, 'UTF-8'),
+                mb_strtoupper($category, 'UTF-8'),
+                mb_convert_case($category, MB_CASE_TITLE, 'UTF-8'),
+            ]));
+            $query->whereIn('products.category', $variants);
+        }
+
+        if (isset($filters['min_discount'])) {
+            $query->where('offers.discount_pct', '>=', (int) $filters['min_discount']);
+        }
+
+        if (array_key_exists('has_discount', $filters) && filter_var($filters['has_discount'], FILTER_VALIDATE_BOOLEAN)) {
+            $query->whereNotNull('offers.original_price')
+                ->whereColumn('offers.original_price', '>', 'offers.price');
+        }
+
+        // valid_on: NULL bounds are open. Default to today.
+        //
+        // SQLite stores `date` columns as `YYYY-MM-DD 00:00:00` strings,
+        // so comparing against a bare `YYYY-MM-DD` literal puts the
+        // stored value strictly greater (the trailing space character
+        // sorts after end-of-string). Compare against an end-of-day cap
+        // for valid_from and a start-of-day floor for valid_to so the
+        // window check works on both SQLite and Postgres.
+        $validOn = $filters['valid_on'] ?? Carbon::now()->toDateString();
+        $endOfDay = $validOn.' 23:59:59';
+        $startOfDay = $validOn.' 00:00:00';
+        $query->where(function (Builder $q) use ($endOfDay): void {
+            $q->whereNull('offers.valid_from')->orWhere('offers.valid_from', '<=', $endOfDay);
+        })->where(function (Builder $q) use ($startOfDay): void {
+            $q->whereNull('offers.valid_to')->orWhere('offers.valid_to', '>=', $startOfDay);
+        });
+
+        if (isset($filters['q']) && $filters['q'] !== '') {
+            $normalized = StringNormalizer::normalize($filters['q']);
+            $query->where('products.normalized_name', 'like', '%'.$normalized.'%');
+        }
+
+        return $query->select('offers.*');
+    }
+
+    /**
+     * GET /api/public/v1/search?q=...
+     *
+     * Convenience alias of /offers?q=... so third-party clients building
+     * search-first UIs have a memorable endpoint. All other query
+     * parameters from /offers are honoured.
+     */
+    public function search(OfferIndexRequest $request): ResourceCollection|JsonResponse
+    {
+        if (! $request->filled('q')) {
+            return response()->json([
+                'message' => "The 'q' query parameter is required for /search.",
+                'errors' => ['q' => ["The 'q' query parameter is required for /search."]],
+            ], 422);
+        }
+
+        return $this->index($request);
+    }
+}
