@@ -1,12 +1,12 @@
 export function OfferCardSkeleton() {
   return (
-    <div className="flex animate-pulse flex-col overflow-hidden rounded-xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
-      <div className="aspect-square w-full bg-zinc-100 dark:bg-zinc-800" />
+    <div className="flex animate-pulse flex-col overflow-hidden rounded-[var(--radius-card)] border border-border bg-surface shadow-card">
+      <div className="aspect-square w-full bg-canvas-muted" />
       <div className="space-y-2 p-3">
-        <div className="h-3 w-16 rounded bg-zinc-200 dark:bg-zinc-800" />
-        <div className="h-4 w-full rounded bg-zinc-200 dark:bg-zinc-800" />
-        <div className="h-4 w-3/4 rounded bg-zinc-200 dark:bg-zinc-800" />
-        <div className="h-5 w-20 rounded bg-zinc-200 dark:bg-zinc-800" />
+        <div className="h-3 w-16 rounded bg-canvas-muted" />
+        <div className="h-4 w-full rounded bg-canvas-muted" />
+        <div className="h-4 w-3/4 rounded bg-canvas-muted" />
+        <div className="h-5 w-20 rounded bg-canvas-muted" />
       </div>
     </div>
   );

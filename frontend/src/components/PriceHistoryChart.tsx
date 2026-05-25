@@ -41,8 +41,8 @@ export function PriceHistoryChart({ history, currency = "EUR" }: Props) {
       : "";
 
   return (
-    <div className="rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
-      <h2 className="mb-3 text-sm font-semibold text-zinc-700 dark:text-zinc-300">
+    <div className="rounded-[var(--radius-card)] border border-border bg-surface p-4 shadow-card">
+      <h2 className="mb-3 text-sm font-semibold text-ink-soft">
         Ιστορικό τιμής
       </h2>
       <svg
@@ -57,13 +57,13 @@ export function PriceHistoryChart({ history, currency = "EUR" }: Props) {
           x2={padding.left + innerW}
           y2={padding.top + innerH}
           stroke="currentColor"
-          className="text-zinc-200 dark:text-zinc-700"
+          className="text-border"
         />
         <text
           x={padding.left - 8}
           y={padding.top + 4}
           textAnchor="end"
-          className="fill-zinc-500 text-[10px]"
+          className="fill-ink-muted text-[10px]"
         >
           {formatPrice(max, currency)}
         </text>
@@ -71,33 +71,22 @@ export function PriceHistoryChart({ history, currency = "EUR" }: Props) {
           x={padding.left - 8}
           y={padding.top + innerH + 4}
           textAnchor="end"
-          className="fill-zinc-500 text-[10px]"
+          className="fill-ink-muted text-[10px]"
         >
           {formatPrice(min, currency)}
         </text>
 
         {areaPath && (
-          <path
-            d={areaPath}
-            className="fill-emerald-500/10"
-            stroke="none"
-          />
+          <path d={areaPath} fill="#5AA9E6" fillOpacity={0.1} stroke="none" />
         )}
         <path
           d={path}
           fill="none"
-          stroke="currentColor"
+          stroke="#5AA9E6"
           strokeWidth={2}
-          className="text-emerald-600"
         />
         {points.map((p) => (
-          <circle
-            key={p.point.date}
-            cx={p.x}
-            cy={p.y}
-            r={3}
-            className="fill-emerald-600"
-          />
+          <circle key={p.point.date} cx={p.x} cy={p.y} r={3} fill="#5AA9E6" />
         ))}
         {points.length > 0 && (
           <>
@@ -105,7 +94,7 @@ export function PriceHistoryChart({ history, currency = "EUR" }: Props) {
               x={points[0].x}
               y={height - 8}
               textAnchor="start"
-              className="fill-zinc-500 text-[10px]"
+              className="fill-ink-muted text-[10px]"
             >
               {points[0].point.date}
             </text>
@@ -113,7 +102,7 @@ export function PriceHistoryChart({ history, currency = "EUR" }: Props) {
               x={points[points.length - 1].x}
               y={height - 8}
               textAnchor="end"
-              className="fill-zinc-500 text-[10px]"
+              className="fill-ink-muted text-[10px]"
             >
               {points[points.length - 1].point.date}
             </text>

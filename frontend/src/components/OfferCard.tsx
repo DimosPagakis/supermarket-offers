@@ -9,34 +9,45 @@ type Props = {
   priority?: boolean;
 };
 
+/** Mirrors the strings produced by formatValidity. */
+function isEndingSoon(validity: string): boolean {
+  if (!validity) return false;
+  if (validity === "Λήγει σήμερα" || validity === "Λήγει αύριο") return true;
+  // "Λήγει σε X ημέρες" — treat ≤3 days as the urgency band.
+  const m = validity.match(/Λήγει σε (\d+) ημέρες/);
+  if (m && Number(m[1]) <= 3) return true;
+  return false;
+}
+
 export function OfferCard({ offer, priority = false }: Props) {
   const { product, brand, price, original_price, discount_pct, valid_to, currency } = offer;
   const validity = formatValidity(valid_to);
   const expired = validity === "Έληξε";
+  const endingSoon = !expired && isEndingSoon(validity);
 
   return (
     <Link
       href={`/offers/${offer.id}`}
       prefetch={false}
-      className="group flex flex-col overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm transition hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 dark:border-zinc-800 dark:bg-zinc-900"
+      className="group flex flex-col overflow-hidden rounded-[var(--radius-card)] border border-border bg-surface shadow-card transition hover:-translate-y-0.5 hover:border-brand-soft hover:shadow-card-hover focus:outline-none"
     >
-      <div className="relative aspect-square w-full overflow-hidden bg-zinc-100 dark:bg-zinc-800">
+      <div className="relative aspect-square w-full overflow-hidden bg-canvas-muted">
         {product.image_url ? (
           <Image
             src={product.image_url}
             alt={product.name}
             fill
             sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
-            className="object-contain p-3 transition group-hover:scale-105"
+            className="object-contain p-3 transition-transform duration-300 group-hover:scale-105"
             priority={priority}
           />
         ) : (
-          <div className="flex h-full w-full items-center justify-center text-4xl text-zinc-300 dark:text-zinc-700">
+          <div className="flex h-full w-full items-center justify-center text-4xl text-ink-muted/40">
             <span aria-hidden>🛒</span>
           </div>
         )}
         {discount_pct != null && discount_pct > 0 && (
-          <span className="absolute left-2 top-2 rounded-md bg-rose-600 px-2 py-1 text-xs font-bold text-white shadow">
+          <span className="absolute left-2 top-2 rounded-full bg-accent px-2.5 py-1 text-xs font-bold uppercase tracking-wide text-white shadow-sm">
             -{discount_pct}%
           </span>
         )}
@@ -46,26 +57,26 @@ export function OfferCard({ offer, priority = false }: Props) {
         <div className="flex items-center justify-between gap-2">
           <BrandChip brand={brand} />
           {product.category && (
-            <span className="truncate text-xs text-zinc-500 dark:text-zinc-400">
+            <span className="truncate text-xs text-ink-muted">
               {product.category}
             </span>
           )}
         </div>
 
-        <h3 className="line-clamp-2 min-h-[2.5rem] text-sm font-medium text-zinc-900 dark:text-zinc-100">
+        <h3 className="line-clamp-2 min-h-[2.5rem] text-sm font-medium text-ink">
           {product.name}
         </h3>
 
         {product.unit && (
-          <p className="text-xs text-zinc-500 dark:text-zinc-400">{product.unit}</p>
+          <p className="text-xs text-ink-muted">{product.unit}</p>
         )}
 
         <div className="mt-auto flex items-baseline gap-2">
-          <span className="text-xl font-bold text-emerald-600 dark:text-emerald-400">
+          <span className="text-xl font-bold text-ink">
             {formatPrice(price, currency)}
           </span>
           {original_price != null && original_price > price && (
-            <span className="text-sm text-zinc-400 line-through">
+            <span className="text-sm text-ink-muted line-through">
               {formatPrice(original_price, currency)}
             </span>
           )}
@@ -73,7 +84,13 @@ export function OfferCard({ offer, priority = false }: Props) {
 
         {validity && (
           <p
-            className={`text-xs ${expired ? "text-zinc-400" : "text-zinc-600 dark:text-zinc-400"}`}
+            className={
+              expired
+                ? "text-xs text-ink-muted"
+                : endingSoon
+                  ? "inline-flex w-fit items-center gap-1 rounded-full bg-warn-soft px-2 py-0.5 text-xs font-medium text-ink-soft"
+                  : "text-xs text-ink-soft"
+            }
           >
             {validity}
           </p>

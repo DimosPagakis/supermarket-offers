@@ -30,10 +30,10 @@ export default async function HomePage({ searchParams }: PageProps<"/">) {
       basePath="/"
       heading={
         <header className="flex flex-col gap-1">
-          <h1 className="text-2xl font-bold tracking-tight">
+          <h1 className="text-3xl font-bold tracking-tight text-ink">
             Οι μεγαλύτερες εκπτώσεις σήμερα
           </h1>
-          <p className="text-sm text-zinc-600 dark:text-zinc-400">
+          <p className="text-sm text-ink-soft">
             Συγκεντρωμένες προσφορές από AB, Σκλαβενίτη, Lidl, My Market και Μασούτη.
           </p>
         </header>

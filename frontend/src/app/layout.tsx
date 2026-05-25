@@ -37,7 +37,7 @@ export default function RootLayout({
       lang="el"
       className={`${inter.variable} h-full antialiased`}
     >
-      <body className="flex min-h-full flex-col bg-zinc-50 font-sans text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100">
+      <body className="flex min-h-full flex-col bg-canvas font-sans text-ink">
         <Header />
         <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-6">{children}</main>
         <Footer />

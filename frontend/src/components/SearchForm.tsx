@@ -31,11 +31,11 @@ export function SearchForm({ initial }: { initial?: string }) {
         onChange={(e) => setValue(e.target.value)}
         placeholder="Αναζήτηση π.χ. φέτα"
         aria-label="Αναζήτηση προσφορών"
-        className="flex-1 rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-emerald-500 focus:outline-none dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
+        className="flex-1 rounded-full border border-border bg-surface px-4 py-2 text-sm text-ink placeholder:text-ink-muted focus:border-brand focus:outline-none"
       />
       <button
         type="submit"
-        className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-500"
+        className="rounded-full bg-brand px-5 py-2 text-sm font-semibold text-white transition-colors hover:bg-brand-hover focus:outline-none"
       >
         Αναζήτηση
       </button>

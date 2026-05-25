@@ -43,6 +43,13 @@ export function FiltersSidebar({ brands, categories, lockedBrand }: Props) {
 
   const [minDiscountLocal, setMinDiscountLocal] = useState(minDiscount);
 
+  // Count of currently-active filters (excludes locked brand + free-text q).
+  const activeFilters =
+    (lockedBrand ? 0 : selectedBrands.size) +
+    (selectedCategory ? 1 : 0) +
+    (minDiscount > 0 ? 1 : 0) +
+    (validToday ? 1 : 0);
+
   const updateParam = useCallback(
     (mutate: (sp: URLSearchParams) => void) => {
       const sp = new URLSearchParams(searchParams.toString());
@@ -97,10 +104,22 @@ export function FiltersSidebar({ brands, categories, lockedBrand }: Props) {
 
   return (
     <aside
-      className={`flex flex-col gap-6 rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900 ${pending ? "opacity-70" : ""}`}
+      className={`flex flex-col gap-6 rounded-[var(--radius-card)] border border-border bg-surface p-4 shadow-card ${pending ? "opacity-70" : ""}`}
     >
+      <div className="flex items-center justify-between">
+        <h2 className="text-sm font-semibold text-ink">Φίλτρα</h2>
+        {activeFilters > 0 && (
+          <span
+            className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-accent px-1.5 text-[10px] font-bold text-white"
+            aria-label={`${activeFilters} ενεργά φίλτρα`}
+          >
+            {activeFilters}
+          </span>
+        )}
+      </div>
+
       <div>
-        <h3 className="mb-2 text-sm font-semibold text-zinc-700 dark:text-zinc-300">
+        <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-muted">
           Αλυσίδα
         </h3>
         <div className="flex flex-wrap gap-2">
@@ -116,15 +135,19 @@ export function FiltersSidebar({ brands, categories, lockedBrand }: Props) {
                 onClick={() => onToggleBrand(b.slug)}
                 disabled={!!lockedBrand}
                 aria-pressed={active}
-                className="rounded-full px-3 py-1 text-xs font-medium transition disabled:cursor-not-allowed"
+                className={`rounded-full px-3 py-1 text-xs font-medium transition-colors disabled:cursor-not-allowed ${
+                  active
+                    ? "ring-2"
+                    : "border border-border hover:bg-canvas-muted"
+                }`}
                 style={
                   active
-                    ? { backgroundColor: colour.bg, color: colour.fg }
-                    : {
-                        backgroundColor: "transparent",
-                        color: colour.bg,
-                        border: `1px solid ${colour.bg}`,
+                    ? {
+                        backgroundColor: colour.bg,
+                        color: colour.fg,
+                        boxShadow: `inset 0 0 0 1px ${colour.ring}`,
                       }
+                    : { color: "var(--color-ink-soft)" }
                 }
               >
                 {b.name}
@@ -137,7 +160,7 @@ export function FiltersSidebar({ brands, categories, lockedBrand }: Props) {
       <div>
         <label
           htmlFor="category"
-          className="mb-2 block text-sm font-semibold text-zinc-700 dark:text-zinc-300"
+          className="mb-2 block text-xs font-semibold uppercase tracking-wide text-ink-muted"
         >
           Κατηγορία
         </label>
@@ -145,7 +168,7 @@ export function FiltersSidebar({ brands, categories, lockedBrand }: Props) {
           id="category"
           value={selectedCategory}
           onChange={(e) => onChangeCategory(e.target.value)}
-          className="w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 focus:border-emerald-500 focus:outline-none dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
+          className="w-full rounded-md border border-border bg-surface px-3 py-2 text-sm text-ink focus:border-brand focus:outline-none"
         >
           <option value="">Όλες οι κατηγορίες</option>
           {categories.map((c) => (
@@ -160,11 +183,11 @@ export function FiltersSidebar({ brands, categories, lockedBrand }: Props) {
         <div className="mb-2 flex items-center justify-between">
           <label
             htmlFor="min_discount"
-            className="text-sm font-semibold text-zinc-700 dark:text-zinc-300"
+            className="text-xs font-semibold uppercase tracking-wide text-ink-muted"
           >
             Ελάχιστη έκπτωση
           </label>
-          <span className="text-sm text-zinc-600 dark:text-zinc-400">
+          <span className="text-sm font-medium text-ink">
             {minDiscountLocal}%
           </span>
         </div>
@@ -185,27 +208,29 @@ export function FiltersSidebar({ brands, categories, lockedBrand }: Props) {
           onKeyUp={(e) =>
             onCommitMinDiscount(Number((e.target as HTMLInputElement).value))
           }
-          className="w-full accent-emerald-600"
+          className="w-full accent-brand"
         />
       </div>
 
-      <label className="flex items-center gap-2 text-sm text-zinc-700 dark:text-zinc-300">
+      <label className="flex items-center gap-2 text-sm text-ink-soft">
         <input
           type="checkbox"
           checked={validToday}
           onChange={onToggleHasDiscount}
-          className="h-4 w-4 rounded border-zinc-300 text-emerald-600 focus:ring-emerald-500"
+          className="h-4 w-4 rounded border-border accent-brand"
         />
         Μόνο με έκπτωση
       </label>
 
-      <button
-        type="button"
-        onClick={onReset}
-        className="text-xs font-medium text-zinc-500 underline hover:text-zinc-700 dark:hover:text-zinc-300"
-      >
-        Καθαρισμός φίλτρων
-      </button>
+      {activeFilters > 0 && (
+        <button
+          type="button"
+          onClick={onReset}
+          className="rounded-full px-3 py-2 text-xs font-medium text-brand transition-colors hover:bg-brand-fade"
+        >
+          Καθαρισμός φίλτρων
+        </button>
+      )}
     </aside>
   );
 }

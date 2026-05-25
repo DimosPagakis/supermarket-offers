@@ -4,18 +4,27 @@ import { SearchForm } from "./SearchForm";
 
 export function Header() {
   return (
-    <header className="sticky top-0 z-20 border-b border-zinc-200 bg-white/80 backdrop-blur dark:border-zinc-800 dark:bg-zinc-950/80">
+    <header className="sticky top-0 z-20 border-b border-border bg-surface/90 backdrop-blur">
       <div className="mx-auto flex max-w-7xl flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-4">
-          <Link href="/" className="flex items-center gap-2 text-lg font-bold text-emerald-600">
+          <Link
+            href="/"
+            className="flex items-center gap-2 text-lg font-bold text-brand transition-colors hover:text-brand-hover"
+          >
             <span aria-hidden>🛒</span>
             <span>Προσφορές</span>
           </Link>
-          <nav className="flex items-center gap-3 text-sm text-zinc-600 dark:text-zinc-400">
-            <Link href="/offers" className="hover:text-emerald-600">
+          <nav className="flex items-center gap-4 text-sm text-ink-soft">
+            <Link
+              href="/offers"
+              className="rounded-md py-1 transition-colors hover:text-brand"
+            >
               Όλες οι προσφορές
             </Link>
-            <Link href="/about" className="hover:text-emerald-600">
+            <Link
+              href="/about"
+              className="rounded-md py-1 transition-colors hover:text-brand"
+            >
               Σχετικά
             </Link>
           </nav>
