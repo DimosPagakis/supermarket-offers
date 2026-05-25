@@ -159,54 +159,97 @@ export function OffersFiltersBar({ brands, categories, lockedBrand }: Props) {
     });
   };
 
+  // Close any open <details> popovers when clicking outside the bar.
+  // Without this, the brand popover stays open until the next click on
+  // the same summary — annoying when filters compose.
+  const barRef = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    function onDown(e: MouseEvent) {
+      if (!barRef.current) return;
+      if (barRef.current.contains(e.target as Node)) return;
+      barRef.current
+        .querySelectorAll("details[open]")
+        .forEach((d) => d.removeAttribute("open"));
+    }
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, []);
+
+  const brandSummary =
+    selectedBrands.size === 0
+      ? "Όλες"
+      : selectedBrands.size === 1
+        ? (brands.find((b) => b.slug === [...selectedBrands][0])?.name ?? "1 επιλογή")
+        : `${selectedBrands.size} επιλεγμένες`;
+
+  const discountSummary =
+    minDiscount > 0 ? `≥ ${minDiscount}%` : "Όλες";
+
   return (
     <section
+      ref={barRef}
       aria-label="Φίλτρα προσφορών"
       className={`bg-canvas rounded-[var(--radius-soft)] shadow-raised p-4 md:p-5 ${pending ? "opacity-70" : ""}`}
     >
       <div className="flex flex-wrap items-center gap-x-3 gap-y-3">
-        {/* Brand chips */}
+        {/* Brands — multi-select popover */}
         {!lockedBrand && (
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-xs font-semibold text-ink-soft mr-1">
-              Αλυσίδες
-            </span>
-            {brands.map((b) => {
-              const active = selectedBrands.has(b.slug);
-              const colour = brandColour(b.slug);
-              return (
-                <button
-                  key={b.slug}
-                  type="button"
-                  onClick={() => onToggleBrand(b.slug)}
-                  aria-pressed={active}
-                  className={`rounded-full px-3 py-1 text-xs font-medium transition-shadow focus:outline-none focus-visible:ring-2 focus-visible:ring-brand ${
-                    active ? "shadow-inset" : "shadow-raised-sm hover:shadow-raised"
-                  }`}
-                  style={
-                    active
-                      ? { backgroundColor: colour.bg, color: colour.fg }
-                      : { backgroundColor: "var(--color-canvas)", color: "var(--color-ink-soft)" }
-                  }
-                >
-                  {b.name}
-                </button>
-              );
-            })}
-          </div>
+          <details className="relative">
+            <summary
+              className="flex cursor-pointer list-none items-center gap-2 rounded-[var(--radius-soft)] bg-canvas px-3 py-1.5 text-xs font-semibold text-ink-soft shadow-inset focus-visible:ring-2 focus-visible:ring-brand"
+              aria-label={`Αλυσίδες: ${brandSummary}`}
+            >
+              <span>Αλυσίδες</span>
+              <span className="font-normal text-ink">{brandSummary}</span>
+              <span aria-hidden className="text-ink-muted">▾</span>
+            </summary>
+            <div
+              role="group"
+              className="absolute left-0 top-[calc(100%+0.5rem)] z-30 flex min-w-[14rem] flex-col gap-1 rounded-[var(--radius-soft)] bg-canvas p-2 shadow-raised-lg"
+            >
+              {brands.map((b) => {
+                const active = selectedBrands.has(b.slug);
+                const colour = brandColour(b.slug);
+                return (
+                  <button
+                    key={b.slug}
+                    type="button"
+                    onClick={() => onToggleBrand(b.slug)}
+                    aria-pressed={active}
+                    className={`flex items-center gap-2 rounded-[var(--radius-soft-pill)] px-3 py-1.5 text-left text-xs font-medium transition-shadow focus:outline-none focus-visible:ring-2 focus-visible:ring-brand ${
+                      active ? "shadow-inset" : "hover:shadow-raised-sm"
+                    }`}
+                    style={
+                      active
+                        ? { backgroundColor: colour.bg, color: colour.fg }
+                        : undefined
+                    }
+                  >
+                    <span
+                      className="inline-block h-2 w-2 shrink-0 rounded-full"
+                      style={{ backgroundColor: colour.bg }}
+                      aria-hidden
+                    />
+                    <span className="flex-1 truncate">{b.name}</span>
+                    {active && (
+                      <span aria-hidden className="text-base leading-none">
+                        ✓
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </details>
         )}
 
-        {!lockedBrand && (
-          <div className="hidden h-6 w-px bg-border md:block" />
-        )}
-
-        {/* Category dropdown */}
+        {/* Category dropdown — narrower, with `max-w` so it can't eat the bar. */}
         <label className="flex items-center gap-2 text-xs font-semibold text-ink-soft">
           Κατηγορία
           <select
             value={selectedCategory}
             onChange={(e) => onChangeCategory(e.target.value)}
-            className="rounded-[var(--radius-soft)] bg-canvas px-3 py-1.5 text-sm font-normal text-ink shadow-inset focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+            className="max-w-[10rem] truncate rounded-[var(--radius-soft)] bg-canvas px-3 py-1.5 text-sm font-normal text-ink shadow-inset focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
           >
             <option value="">Όλες</option>
             {categories.map((c) => (
@@ -217,36 +260,26 @@ export function OffersFiltersBar({ brands, categories, lockedBrand }: Props) {
           </select>
         </label>
 
-        {/* Min-discount pill stepper. Pill labels carry the ≥ symbol so
-            "≥30%" reads unambiguously as "30 or more", not "exactly 30".
-            User feedback was that bare "30%" looked like an equality and
-            users were surprised to see 50%-off items on the page. */}
-        <fieldset className="flex items-center gap-2 text-xs font-semibold text-ink-soft">
-          <legend className="contents">Έκπτωση τουλάχιστον</legend>
-          {DISCOUNT_STEPS.map((n) => {
-            const active = minDiscount === n;
-            return (
-              <button
-                key={n}
-                type="button"
-                onClick={() => onChangeMinDiscount(n)}
-                aria-pressed={active}
-                title={
-                  n === 0
-                    ? "Χωρίς ελάχιστη έκπτωση"
-                    : `Δείξε μόνο προσφορές με έκπτωση τουλάχιστον ${n}%`
-                }
-                className={`min-w-[3.25rem] rounded-full px-2 py-1 text-xs font-semibold transition-shadow focus:outline-none focus-visible:ring-2 focus-visible:ring-brand ${
-                  active
-                    ? "shadow-inset text-brand"
-                    : "shadow-raised-sm text-ink-soft hover:shadow-raised"
-                }`}
-              >
-                {n === 0 ? "καμία" : `≥ ${n}%`}
-              </button>
-            );
-          })}
-        </fieldset>
+        {/* Min-discount dropdown — single threshold (lower bound). The ≥
+            prefix in each label keeps the semantics unambiguous. */}
+        <label className="flex items-center gap-2 text-xs font-semibold text-ink-soft">
+          Έκπτωση
+          <select
+            value={minDiscount > 0 ? String(minDiscount) : ""}
+            onChange={(e) =>
+              onChangeMinDiscount(e.target.value ? Number(e.target.value) : 0)
+            }
+            className="rounded-[var(--radius-soft)] bg-canvas px-3 py-1.5 text-sm font-normal text-ink shadow-inset focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+            aria-label={`Ελάχιστη έκπτωση: ${discountSummary}`}
+          >
+            <option value="">Όλες</option>
+            {DISCOUNT_STEPS.filter((n) => n > 0).map((n) => (
+              <option key={n} value={String(n)}>
+                ≥ {n}%
+              </option>
+            ))}
+          </select>
+        </label>
 
         {/* Only-with-discount toggle chip */}
         <button
