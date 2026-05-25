@@ -11,7 +11,7 @@ from decimal import Decimal
 from pathlib import Path
 
 from scraper.items import OfferItem
-from scraper.parsers.mymarket import extract_offers
+from scraper.parsers.mymarket import extract_offers, extract_total_pages
 
 FIXTURE = (
     Path(__file__).parent / "fixtures" / "mymarket" / "listing-page1.html"
@@ -88,3 +88,43 @@ def test_payload_round_trip_matches_backend_contract() -> None:
     assert payload["price"] == 0.72
     assert payload["original_price"] is None
     assert payload["discount_pct"] is None
+
+
+def test_extract_total_pages_from_listing() -> None:
+    """The fixture's pagination nav exposes ``data-mkey="page-159"`` as
+    the highest page link. The parser should pick that up so the spider
+    knows how far to walk."""
+    html = FIXTURE.read_text(encoding="utf-8")
+    assert extract_total_pages(html) == 159
+
+
+def test_extract_total_pages_returns_none_without_pagination() -> None:
+    """If the listing has no pagination nav at all (single-page result),
+    the parser should return ``None`` so the spider can treat it as a
+    one-page crawl rather than misclassify selector drift as 'no more
+    pages'."""
+    html_no_nav = """
+    <html><body>
+      <div class="product--teaser" data-id="1">...</div>
+    </body></html>
+    """
+    assert extract_total_pages(html_no_nav) is None
+
+
+def test_extract_offers_returns_empty_on_zero_card_page() -> None:
+    """Defence-in-depth pagination stop signal: if a page has no
+    ``.product--teaser`` cards (catalogue end / selector drift), the
+    parser should yield nothing rather than raising. The spider relies
+    on that to short-circuit pagination safely."""
+    html_no_cards = """
+    <html><body>
+      <main>
+        <h1>No offers found</h1>
+        <nav><a data-mkey="page-2" href="/offers?page=2">2</a></nav>
+      </main>
+    </body></html>
+    """
+    offers = list(
+        extract_offers(html_no_cards, SCRAPED_AT)
+    )
+    assert offers == []

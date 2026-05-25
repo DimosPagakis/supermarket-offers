@@ -18,10 +18,36 @@ This replaces the earlier flyer-based approach, which followed
 ``/c/fylladio-lidl/...`` and ended up on an image-viewer page with no
 parseable product HTML. The campaign pages above contain the same
 products in structured JSON.
+
+Coverage audit (verified 2026-05-25)
+------------------------------------
+* Homepage advertises **all** active weekly campaigns — 31 unique
+  ``/c/<theme>-{YY}kw{WW}/a{id}`` anchors when verified.
+* ``/c/fylladio-lidl/s10020481`` (the "flyer landing" page) contains
+  zero campaign anchors — it's an image-viewer shell. No additional
+  URLs to discover there.
+* ``https://www.lidl-hellas.gr/sitemap.xml`` does not exist
+  (404). No XML sitemap to follow.
+* Within a single campaign, **every** product is embedded in the
+  same HTML response as ``data-grid-data="..."`` attributes —
+  there is no "show more" trigger, lazy load, or sub-pagination on
+  the listing. One HTTP GET per campaign covers the full set.
+
+Conclusion: walking every homepage campaign anchor is the complete
+"all available offers" discovery. There is no untapped URL bucket
+on lidl-hellas.gr today.
+
+Safety cap
+----------
+``LIDL_MAX_CAMPAIGNS`` puts a ceiling on how many campaign URLs we
+follow per run. Defaults to a generous 200 — way above the 31
+observed live — and is overridable via ``CRAWLER_MAX_PAGES_LIDL`` so
+the scheduler can crank it without a code change.
 """
 
 from __future__ import annotations
 
+import os
 import re
 from datetime import datetime, timezone
 from typing import Any
@@ -39,6 +65,10 @@ from scraper.parsers.lidl import extract_offers
 #   /c/poiotita-poikilia-26kw21/a10095202
 #   /c/parkside-ergaleia-exoplismos-26kw21/a10095190
 _CAMPAIGN_HREF_RE = re.compile(r"^/c/[^/]+-\d{2}kw\d{1,2}/a\d+/?$")
+
+# Safety cap on campaigns per run. Real catalogue sits well under 50.
+# Override via ``CRAWLER_MAX_PAGES_LIDL=<N>`` if Lidl ever expands.
+LIDL_MAX_CAMPAIGNS = int(os.getenv("CRAWLER_MAX_PAGES_LIDL", "200"))
 
 
 class LidlSpider(scrapy.Spider):
@@ -92,7 +122,20 @@ class LidlSpider(scrapy.Spider):
             )
             return
 
-        logger.info("lidl: discovered {} campaign URLs", len(ordered_unique))
+        if len(ordered_unique) > LIDL_MAX_CAMPAIGNS:
+            logger.warning(
+                "lidl: discovered {} campaign URLs, clipping to safety cap "
+                "{} (bump CRAWLER_MAX_PAGES_LIDL to widen)",
+                len(ordered_unique),
+                LIDL_MAX_CAMPAIGNS,
+            )
+            ordered_unique = ordered_unique[:LIDL_MAX_CAMPAIGNS]
+
+        logger.info(
+            "lidl: discovered {} campaign URLs (cap {})",
+            len(ordered_unique),
+            LIDL_MAX_CAMPAIGNS,
+        )
 
         for path in ordered_unique:
             yield scrapy.Request(

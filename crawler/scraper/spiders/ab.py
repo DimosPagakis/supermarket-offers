@@ -10,6 +10,19 @@ The heavy mapping logic lives in ``scraper.parsers.ab`` and is
 exercised against a committed fixture so we'd catch a schema change
 in plain pytest before a live run.
 
+Pagination
+----------
+AB's GraphQL ``ProductList`` query returns ``pagination.totalPages``
+on every page; we paginate from 0 until ``totalPages`` is reached, or
+``AB_MAX_PAGES`` is hit (whichever comes first). The cap is a
+safety net for runaway catalogues only — the dynamic ``totalPages``
+is the real stop condition. On 2026-05-25 the catalogue was 87 pages;
+the cap is 120 to leave headroom.
+
+When the cap clips real coverage the spider emits a ``WARNING`` line
+that names ``CRAWLER_MAX_PAGES_AB`` — set that env var to a larger
+integer to widen the cap without a code change.
+
 Risks worth knowing about
 -------------------------
 * AB can rotate the persisted-query sha256 hash without warning.
@@ -26,6 +39,7 @@ Risks worth knowing about
 from __future__ import annotations
 
 import json
+import os
 from datetime import datetime, timezone
 from typing import Any
 from urllib.parse import urlencode
@@ -53,7 +67,8 @@ AB_LAZY_LOAD_COUNT = 10
 # Hard cap on pages crawled per run. The fixture's pagination block
 # reported ``totalPages: 87`` on 2026-05-25; cap a touch higher to be
 # tolerant of catalogue growth without crawling forever on a bug.
-AB_MAX_PAGES = 120
+# Override per-environment with ``CRAWLER_MAX_PAGES_AB=<N>``.
+AB_MAX_PAGES = int(os.getenv("CRAWLER_MAX_PAGES_AB", "120"))
 
 
 class AbSpider(scrapy.Spider):
@@ -76,6 +91,13 @@ class AbSpider(scrapy.Spider):
         "DOWNLOAD_DELAY": 2,
         "CONCURRENT_REQUESTS_PER_DOMAIN": 1,
     }
+
+    # Coverage stats — populated as we walk pages, surfaced in
+    # ``closed()`` so the run-log always carries an "X/Y pages reached"
+    # audit line. Lets us spot the moment AB's catalogue starts
+    # bumping against ``AB_MAX_PAGES``.
+    _first_total_pages: int | None = None
+    _last_page_reached: int = -1
 
     async def start(self):  # type: ignore[override]
         # Scrapy 2.13+ replaced ``start_requests`` with the async-iterable
@@ -115,6 +137,13 @@ class AbSpider(scrapy.Spider):
         total_pages = int(pagination.get("totalPages") or 0)
         total_results = int(pagination.get("totalResults") or 0)
 
+        # Audit trail: remember the first page's view of totalPages and
+        # the highest page we've actually fetched. ``closed()`` logs the
+        # delta so the operator can spot truncation at a glance.
+        if self._first_total_pages is None:
+            self._first_total_pages = total_pages
+        self._last_page_reached = max(self._last_page_reached, page_number)
+
         scraped_at = datetime.now(timezone.utc)
         count = 0
         for offer in extract_offers_from_payload(payload, scraped_at):
@@ -134,9 +163,35 @@ class AbSpider(scrapy.Spider):
         # Paginate. AB's pagination is 0-indexed; stop when we've covered
         # totalPages or hit our safety cap.
         next_page = page_number + 1
-        if next_page >= min(total_pages, AB_MAX_PAGES):
+        if next_page >= total_pages:
+            return
+        if next_page >= AB_MAX_PAGES:
+            logger.warning(
+                "ab: hit AB_MAX_PAGES={} before totalPages={} — "
+                "bump CRAWLER_MAX_PAGES_AB to crawl the full catalogue.",
+                AB_MAX_PAGES,
+                total_pages,
+            )
             return
         yield self._build_page_request(page_number=next_page)
+
+    def closed(self, reason: str) -> None:
+        """Audit log: did we hit ``totalPages``, or stop short?"""
+        first_total = self._first_total_pages
+        if first_total is None:
+            logger.info("ab: closed without any successful page (reason={})", reason)
+            return
+        # ``_last_page_reached`` is the highest 0-indexed page; +1 for human count.
+        pages_walked = self._last_page_reached + 1
+        suffix = " (FULL COVERAGE)" if pages_walked >= first_total else " (TRUNCATED)"
+        logger.info(
+            "ab: closed — walked {} of {} pages (cap {}, reason={}){}",
+            pages_walked,
+            first_total,
+            AB_MAX_PAGES,
+            reason,
+            suffix,
+        )
 
     # --- helpers -------------------------------------------------------------
 
