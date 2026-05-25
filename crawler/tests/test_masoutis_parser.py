@@ -12,7 +12,7 @@ from decimal import Decimal
 from pathlib import Path
 
 from scraper.items import OfferItem
-from scraper.parsers.masoutis import extract_offers
+from scraper.parsers.masoutis import extract_offers, extract_offers_from_payload
 
 FIXTURE = (
     Path(__file__).parent / "fixtures" / "masoutis" / "promoitem-page0.json"
@@ -92,3 +92,60 @@ def test_payload_round_trip_matches_backend_contract() -> None:
     # Dates are null in the API; payload should reflect that.
     assert payload["valid_from"] is None
     assert payload["valid_to"] is None
+
+
+# ---------------------------------------------------------------------------
+# Pagination — the Masoutis spider walks ``IfWeight`` pages until a page
+# returns fewer than 50 items. The parser itself is page-agnostic; these
+# tests verify that the spider can safely feed it page-by-page payloads
+# and that the parser doesn't choke on the short final page.
+# ---------------------------------------------------------------------------
+
+
+def _product_stub(itemcode: int) -> dict:
+    """Minimal Masoutis promo row, just enough for the parser to keep it."""
+    return {
+        "Itemcode": itemcode,
+        "ItemDescr": f"Synthetic product {itemcode}",
+        "ItemDescrLink": (
+            f"https://www.masoutis.gr/categories/item/synthetic-{itemcode}"
+        ),
+        "PhotoData": "https://example.com/img.jpg",
+        "PosPrice": "1.23",
+        "StartPrice": "2.00",
+        "Discount": "-39%",
+        "BrandNameDesciption": "Synthetic",
+        "ItemVolume": "1τμχ",
+    }
+
+
+def test_parser_handles_multi_page_concatenation() -> None:
+    """Walk two synthetic ``IfWeight`` pages through the parser and
+    confirm the offers from both surface independently — i.e. the spider
+    can call ``extract_offers_from_payload`` per page and accumulate."""
+    page1 = [_product_stub(i) for i in range(50)]
+    page2 = [_product_stub(i) for i in range(50, 87)]  # short final page
+
+    offers = []
+    for page in (page1, page2):
+        offers.extend(extract_offers_from_payload(page, SCRAPED_AT))
+
+    assert len(offers) == 87
+    # External IDs must remain distinct — no cross-page collision.
+    external_ids = [o.external_id for o in offers]
+    assert len(set(external_ids)) == 87
+
+
+def test_parser_handles_empty_final_page() -> None:
+    """A defensively-empty page (zero items) should yield zero offers
+    without raising — that's the spider's terminal stop condition."""
+    offers = list(extract_offers_from_payload([], SCRAPED_AT))
+    assert offers == []
+
+
+def test_parser_short_page_signals_end_of_catalogue() -> None:
+    """A page < 50 items is the storefront's "this is the last page"
+    signal; the parser still emits every row, the spider stops after."""
+    short_page = [_product_stub(i) for i in range(37)]
+    offers = list(extract_offers_from_payload(short_page, SCRAPED_AT))
+    assert len(offers) == 37
