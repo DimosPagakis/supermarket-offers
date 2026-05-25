@@ -15,14 +15,18 @@ class BrandSeeder extends Seeder
                 'name' => 'AB Vassilopoulos',
                 'slug' => 'ab',
                 'website_url' => 'https://www.ab.gr',
-                'start_url' => 'https://www.ab.gr/promotions/leaflet',
+                // Site is fully JS-rendered. /search/promotions is the offers gateway —
+                // requires browser execution to surface product listings.
+                'start_url' => 'https://www.ab.gr/search/promotions',
+                'strategy' => 'playwright',
             ],
             [
                 'name' => 'Sklavenitis',
                 'slug' => 'sklavenitis',
                 'website_url' => 'https://www.sklavenitis.gr',
-                // Bot-protected — crawler must send realistic browser headers.
+                // Bot-protected on plain HTTP fetches — use Playwright with realistic UA.
                 'start_url' => 'https://www.sklavenitis.gr/sylloges/prosfores',
+                'strategy' => 'playwright',
             ],
             [
                 'name' => 'Lidl Hellas',
@@ -31,19 +35,22 @@ class BrandSeeder extends Seeder
                 // Stable flyer landing page. Spider parses current-week flyer link from here,
                 // then follows. Avoids weekly seed updates (week-specific slugs change Thursdays).
                 'start_url' => 'https://www.lidl-hellas.gr/c/fylladio-lidl/s10020481',
+                'strategy' => 'scrapy',
             ],
             [
                 'name' => 'My Market',
                 'slug' => 'my-market',
                 'website_url' => 'https://www.mymarket.gr',
                 'start_url' => 'https://www.mymarket.gr/offers',
+                'strategy' => 'scrapy',
             ],
             [
                 'name' => 'Masoutis',
                 'slug' => 'masoutis',
                 'website_url' => 'https://www.masoutis.gr',
-                // JS-rendered listing — may need Playwright strategy later.
+                // JS-rendered listing.
                 'start_url' => 'https://www.masoutis.gr/categories/index/prosfores?item=0',
+                'strategy' => 'playwright',
             ],
         ];
 
@@ -61,7 +68,7 @@ class BrandSeeder extends Seeder
             CrawlConfig::updateOrCreate(
                 ['brand_id' => $brand->id],
                 [
-                    'strategy' => 'scrapy',
+                    'strategy' => $data['strategy'],
                     'start_url' => $data['start_url'],
                     'rate_limit_ms' => 2000,
                     'respect_robots_txt' => true,
