@@ -15,19 +15,22 @@ class BrandSeeder extends Seeder
                 'name' => 'AB Vassilopoulos',
                 'slug' => 'ab',
                 'website_url' => 'https://www.ab.gr',
-                'start_url' => 'https://www.ab.gr/shop/discounts',
+                'start_url' => 'https://www.ab.gr/promotions/leaflet',
             ],
             [
                 'name' => 'Sklavenitis',
                 'slug' => 'sklavenitis',
                 'website_url' => 'https://www.sklavenitis.gr',
-                'start_url' => 'https://www.sklavenitis.gr/prosfores/',
+                // Bot-protected — crawler must send realistic browser headers.
+                'start_url' => 'https://www.sklavenitis.gr/sylloges/prosfores',
             ],
             [
                 'name' => 'Lidl Hellas',
                 'slug' => 'lidl',
                 'website_url' => 'https://www.lidl-hellas.gr',
-                'start_url' => 'https://www.lidl-hellas.gr/c/prosfores-evdomadas/s10020863',
+                // Stable flyer landing page. Spider parses current-week flyer link from here,
+                // then follows. Avoids weekly seed updates (week-specific slugs change Thursdays).
+                'start_url' => 'https://www.lidl-hellas.gr/c/fylladio-lidl/s10020481',
             ],
             [
                 'name' => 'My Market',
@@ -39,7 +42,8 @@ class BrandSeeder extends Seeder
                 'name' => 'Masoutis',
                 'slug' => 'masoutis',
                 'website_url' => 'https://www.masoutis.gr',
-                'start_url' => 'https://www.masoutis.gr/prosfores',
+                // JS-rendered listing — may need Playwright strategy later.
+                'start_url' => 'https://www.masoutis.gr/categories/index/prosfores?item=0',
             ],
         ];
 
