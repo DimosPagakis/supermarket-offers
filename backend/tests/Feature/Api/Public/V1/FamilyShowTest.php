@@ -117,9 +117,14 @@ class FamilyShowTest extends PublicApiTestCase
 
         // Stale older offer for `a`. The detail endpoint picks the
         // higher offer id (latest) — so `a`'s current price is 1.00.
+        // discount_pct satisfies the DB-level promo-signal trigger
+        // (offers_require_promo_signal) shipped in the catalogue-leak
+        // cleanup migration.
         Offer::create([
             'product_id' => $a->id,
             'price' => 1.00,
+            'original_price' => 2.00,
+            'discount_pct' => 50,
             'currency' => 'EUR',
             'scraped_at' => Carbon::now()->addMinute(),
         ]);

@@ -27,10 +27,21 @@ impersonation). This module stays I/O-free.
 The ``Προσφορές & Χαμηλές Τιμές`` section mixes "real offers" with
 "low everyday prices" — Sklavenitis does not visually distinguish the
 two on the listing, and there is no per-card "original price" or
-"discount %" exposed. We therefore emit every card as an OfferItem
-with ``price`` populated from the analytics blob (authoritative) and
-leave ``original_price`` / ``discount_pct`` as ``None`` rather than
-fabricate them.
+"discount %" exposed. The *only* per-card promo signal observable in
+the markup is the ``.sign-badges .badge`` "N+M Δώρο" badge that fires
+for BOGOF-style flyer items (1 in 24 cards on the typical fixture
+page).
+
+Discounted-only emit policy (2026-05-25)
+----------------------------------------
+``/sylloges/prosfores`` is misnamed — it ships the chain's full
+active catalogue. The parser therefore gates emit on the gift-badge
+signal: cards without one are catalogue tiles and skipped silently.
+This intentionally collapses Sklavenitis's emit count to near zero
+on the current listing URL — that's the honest answer until we find
+a real flyer entry point. The brand is seeded ``active=false`` to
+match (see ``BrandSeeder``); the spider will not run until we point
+it at a URL with real promo metadata.
 """
 
 from __future__ import annotations
@@ -73,6 +84,14 @@ def extract_offers(html_text: str, scraped_at: datetime) -> Iterable[OfferItem]:
 
 
 def _offer_from_card(card: Selector, scraped_at: datetime) -> OfferItem | None:
+    # Discounted-only gate: only emit cards carrying a gift-badge promo
+    # signal (the lone observable per-card discount marker on the
+    # ``/sylloges/prosfores`` listing). Cards without one are catalogue
+    # tiles. See module docstring.
+    gift_text = _gift_badge_text(card)
+    if not gift_text:
+        return None
+
     product_blob = _load_json_attr(card, "data-plugin-product")
     impressions_blob = _load_json_attr(card, "data-plugin-analyticsimpressions")
 
@@ -137,11 +156,29 @@ def _offer_from_card(card: Selector, scraped_at: datetime) -> OfferItem | None:
         price=price,
         original_price=None,
         discount_pct=None,
+        promo_label=gift_text,
+        promo_type="bxgy_free",
         currency="EUR",
         valid_from=None,
         valid_to=None,
         scraped_at=scraped_at,
     )
+
+
+def _gift_badge_text(card: Selector) -> str | None:
+    """Return the ``N+M Δώρο`` badge text from a card, or ``None`` if absent.
+
+    Sklavenitis surfaces BOGOF-style promos in a ``.sign-badges .badge``
+    block that combines ``.gift_number`` ("4+2") and ``.gift_text``
+    ("Δώρο"). We stitch those two into a single short label suitable for
+    the ``promo_label`` field; absent => caller skips the card.
+    """
+    number = (card.css(".sign-badges .gift_number::text").get() or "").strip()
+    text = (card.css(".sign-badges .gift_text::text").get() or "").strip()
+    if not number or not text:
+        return None
+    composed = f"{number} {text}".strip()
+    return composed[:80] if composed else None
 
 
 def _load_json_attr(card: Selector, attr: str) -> dict[str, Any] | None:

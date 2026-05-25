@@ -79,10 +79,30 @@ def _offer_from_product(
     discount_raw = product.get("Discount")
     discount_pct = _parse_discount_pct(discount_raw)
 
-    # Masoutis only ships single-unit strikethrough deals (no multi-buy
-    # metadata). Surface the brand's own ``Discount`` string verbatim
-    # as the badge label ("-45%") and tag the row as `strikethrough` —
-    # same code path Lidl uses — when a usable percent value parsed.
+    # The ``GetPromoItemWithListCouponsSubCategoriesAutoPromos`` endpoint
+    # name promises "promo items" but the live response can include the
+    # full active catalogue alongside the weekly promos. Require at
+    # least one *price-bearing* promo signal per row:
+    #
+    # * ``Discount`` non-empty and starts with '-' (e.g. "-45%", "-€2"),
+    # * ``StartPrice`` > ``PosPrice`` (a true strikethrough — captured
+    #   as ``original_price`` above; non-None implies the inequality).
+    #
+    # ``OfferDescr`` was tried as a third signal but is populated on
+    # most live rows (including ones at regular shelf price), so it
+    # leaks the catalogue. Keep it as a *value* enrichment (surfaced
+    # via ``promo_label`` below for tagged BOGOF copy) but never as a
+    # standalone gate.
+    if not _has_promo_signal(product, original_price):
+        return None
+
+    # Surface the brand's own ``Discount`` string verbatim as the
+    # badge label ("-45%") and tag the row as `strikethrough` when a
+    # usable percent value parsed. We don't need a label fallback
+    # here: a row that reached this point carried either a Discount
+    # string (handled below) or a StartPrice > PosPrice strikethrough
+    # (the row is admitted on the basis of ``original_price``, which
+    # the backend treats as a promo signal in its own right).
     promo_label: str | None = None
     promo_type: str | None = None
     if discount_pct is not None and discount_pct > 0:
@@ -148,6 +168,34 @@ def _offer_from_product(
         valid_to=None,
         scraped_at=scraped_at,
     )
+
+
+def _has_promo_signal(product: dict[str, Any], original_price: Any) -> bool:
+    """Return True iff ``product`` looks like a genuine promo (not catalogue leak).
+
+    A real Masoutis promo row carries at least one of:
+
+    * ``Discount`` non-empty and starts with '-' / '−' (e.g. "-45%"),
+    * ``StartPrice`` strictly above ``PosPrice`` — manifests as a
+      non-None ``original_price`` in the caller.
+
+    ``OfferDescr`` is deliberately NOT a standalone signal: the live
+    API populates it for most rows (including catalogue items at
+    regular shelf price), so admitting on it leaks the chain
+    catalogue. The parser still surfaces a non-empty OfferDescr as
+    the ``promo_label`` value for rows that pass on Discount /
+    strikethrough, but never as the sole gate.
+
+    Returns False for catalogue-leak rows so the parser can skip them.
+    """
+    if original_price is not None:
+        return True
+    discount = product.get("Discount")
+    if isinstance(discount, str):
+        stripped = discount.strip()
+        if stripped.startswith(("-", "−")) and any(ch.isdigit() for ch in stripped):
+            return True
+    return False
 
 
 def _parse_discount_pct(raw: Any) -> int | None:

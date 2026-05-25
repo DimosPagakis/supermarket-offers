@@ -34,16 +34,23 @@ def _load_offers_current() -> list[OfferItem]:
     return load_offers("lidl", "listing_current.html")
 
 
-def test_extracts_priced_offers_only() -> None:
-    """The fixture has 27 grid cards. Five of them carry no current sale
-    price and must be skipped silently:
+def test_extracts_discounted_offers_only() -> None:
+    """The fixture has 27 grid cards. The parser only emits cards that
+    carry a real promo signal (``percentageDiscount > 0``, a minus-prefixed
+    ``discountText``, or an ``oldPrice`` strictly above ``price``).
+
+    Skipped silently:
       * 3 with an entirely empty ``regionsPrices`` (online-only / banner
         wrappers),
       * 2 with ``regionsPrices.1`` present but ``futurePrices == []``
-        (RETAIL products without a current promotion).
-    Net expected: 22 priced offers."""
+        (RETAIL products without a current promotion),
+      * the remaining cards are everyday-shelf-price tiles sharing the
+        same grid markup as real promotional cards (no `discount` block,
+        no `oldPrice`).
+
+    Net expected: 7 discounted offers."""
     offers = _load_offers()
-    assert len(offers) == 22, f"expected 22 priced offers, got {len(offers)}"
+    assert len(offers) == 7, f"expected 7 discounted offers, got {len(offers)}"
 
 
 def test_first_offer_maps_all_critical_fields() -> None:
@@ -88,21 +95,16 @@ def test_first_offer_maps_all_critical_fields() -> None:
     assert first.promo_label == "−30%"
 
 
-def test_handles_offer_without_discount_block() -> None:
+def test_skips_offer_without_discount_block() -> None:
     """Item #2 in the fixture (Κοπανάκι κοτόπουλο XXL) has a price but no
-    oldPrice / percentageDiscount. Parser should keep the offer and just
-    omit the optional fields."""
+    oldPrice / percentageDiscount / discountText. Under the discounted-
+    only emit policy the parser drops it silently — it is an everyday
+    shelf-price tile masquerading as a promo card on the campaign page.
+    """
     offers = _load_offers()
-
-    target = next((o for o in offers if o.external_id == "11529991"), None)
-    assert target is not None, "expected to find productId 11529991"
-    assert target.name.strip().startswith("Κοπανάκι κοτόπουλο")
-    assert target.price == Decimal("4.49")
-    assert target.original_price is None
-    assert target.discount_pct is None
-    # No discount block → neither field is populated either.
-    assert target.promo_label is None
-    assert target.promo_type is None
+    assert all(o.external_id != "11529991" for o in offers), (
+        "11529991 has no promo signal and must be filtered out"
+    )
 
 
 def test_offers_are_deduplicated_by_external_id() -> None:
@@ -141,12 +143,15 @@ def test_payload_is_backend_contract_shaped() -> None:
 # below pin the fix.
 
 
-def test_extracts_priced_offers_from_currentPrice_shape() -> None:
+def test_extracts_discounted_offers_from_currentPrice_shape() -> None:
     """The currentPrice fixture has 26 grid cards. 23 carry a live
-    ``currentPrice`` block, 3 are unpriced wrappers (empty regionsPrices)
-    and must be skipped silently. Net expected: 23 priced offers."""
+    ``currentPrice`` block, but only some of those carry a real promo
+    signal (``percentageDiscount > 0``, ``discountText`` like "-20%",
+    or ``oldPrice`` > ``price``). The rest are everyday-shelf-price
+    tiles and must be skipped silently. Net expected: 10 discounted
+    offers under the new emit policy."""
     offers = _load_offers_current()
-    assert len(offers) == 23, f"expected 23 priced offers, got {len(offers)}"
+    assert len(offers) == 10, f"expected 10 discounted offers, got {len(offers)}"
 
 
 def test_currentPrice_first_offer_maps_all_critical_fields() -> None:

@@ -59,14 +59,24 @@ SKLAVENITIS_IMPERSONATE = "chrome131"
 
 
 class SklavenitisSpider(scrapy.Spider):
-    """Yield OfferItems for Sklavenitis ``/sylloges/prosfores`` listings."""
+    """Yield OfferItems for Sklavenitis ``/sylloges/prosfores`` listings.
+
+    DEFERRED (2026-05-25): the brand is seeded ``active=false``. The
+    configured ``/sylloges/prosfores`` URL is misnamed — it ships the
+    chain's full active catalogue with no per-card discount markup
+    (no strikethrough, no original price, no "-N%" pill). The lone
+    observable per-card promo signal is a ``.sign-badges`` "N+M Δώρο"
+    gift badge present on ~1 in 24 cards. Under the discounted-only
+    emit policy the parser keeps only those cards — a fair correctness
+    win but far too narrow a yield to justify activating the spider.
+    Re-activate this brand (in ``BrandSeeder``) once a real flyer
+    entry point is identified or Sklavenitis adds strikethrough markup
+    to its listing.
+    """
 
     name = "sklavenitis"
 
     # Matches the seeded backend Brand.id for Sklavenitis (slug "sklavenitis").
-    # NOTE: the brand is seeded ``active=false`` because Akamai blocks naive
-    # crawls. Flip it to active in BrandSeeder once we're happy this spider
-    # holds up in production.
     brand_id = 2
 
     allowed_domains = ["sklavenitis.gr"]

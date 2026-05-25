@@ -79,6 +79,7 @@ class CrawlRunPatchTest extends ApiTestCase
             'product_id' => $product->id,
             'crawl_run_id' => $run->id,
             'price' => 1.00,
+            'discount_pct' => 10,
             'currency' => 'EUR',
             'scraped_at' => now(),
         ]);
@@ -86,6 +87,7 @@ class CrawlRunPatchTest extends ApiTestCase
             'product_id' => $product->id,
             'crawl_run_id' => $run->id,
             'price' => 2.00,
+            'discount_pct' => 20,
             'currency' => 'EUR',
             'scraped_at' => now(),
         ]);

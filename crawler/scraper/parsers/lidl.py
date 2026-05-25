@@ -60,10 +60,16 @@ LIDL_BASE_URL = "https://www.lidl-hellas.gr"
 
 
 def extract_offers(html_text: str, scraped_at: datetime) -> Iterable[OfferItem]:
-    """Yield OfferItem instances for every priced product on a Lidl listing page.
+    """Yield OfferItem instances for every *discounted* product on a Lidl listing page.
 
     Cards without a current sale price (``regionsPrices`` missing or empty)
-    are skipped — we only emit offers, not bare products.
+    are skipped — we only emit offers, not bare products. In addition,
+    cards that have a price block but carry **no real promo signal**
+    (no ``percentageDiscount > 0``, no ``deletedPrice > price``,
+    no ``discountText`` like "-20%") are also skipped — the campaign
+    pages include "everyday low price" cards alongside the weekly
+    flyer items, and the public ``/offers`` endpoint must only show
+    items that actually carry a discount. See module docstring.
     """
     raw_attrs = _GRID_DATA_RE.findall(html_text)
     logger.debug("lidl-parser: found {} data-grid-data attributes", len(raw_attrs))
@@ -124,10 +130,24 @@ def _offer_from_grid_data(data: dict[str, Any], scraped_at: datetime) -> OfferIt
     if sale_price is None:
         return None
 
+    # ``/offers`` is a "weekly promotions" surface, not a full catalogue.
+    # Lidl campaign pages mix two card types in the same grid: cards on
+    # promotion this week (carry a `discount` block with a percentage,
+    # an `oldPrice`, or a `discountText`) and cards at their everyday
+    # shelf price (no `discount` block, no `oldPrice`). Emitting both
+    # would leak the catalogue into a feed that promises offers. Gate
+    # on a real promo signal and skip the rest silently.
+    if not _has_promo_signal(price_block):
+        return None
+
     discount_block: dict[str, Any] = price_block.get("discount") or {}
     original_price = to_decimal(
         price_block.get("oldPrice") or discount_block.get("deletedPrice")
     )
+    # If the only signal was a `discountText` that didn't carry through
+    # to a numeric original price, refuse to misreport: leave it None.
+    if original_price is not None and sale_price is not None and original_price <= sale_price:
+        original_price = None
     discount_pct_raw = discount_block.get("percentageDiscount")
     discount_pct = _to_int_in_range(discount_pct_raw, lo=0, hi=100)
 
@@ -142,6 +162,16 @@ def _offer_from_grid_data(data: dict[str, Any], scraped_at: datetime) -> OfferIt
     if discount_pct is not None and discount_pct > 0:
         promo_label = f"−{discount_pct}%"
         promo_type = "strikethrough"
+    elif original_price is None:
+        # Promo signal was the ``discountText`` only (no numeric pct,
+        # no oldPrice). Surface that text verbatim so the row carries
+        # a real promo_label downstream — the backend's defensive
+        # validator requires at least one of discount_pct /
+        # promo_label / original_price>price.
+        raw_text = (discount_block.get("discountText") or "").strip()
+        if raw_text:
+            promo_label = raw_text[:80]
+            promo_type = "strikethrough"
 
     title = (data.get("title") or "").strip() or None
     if not title:
@@ -187,6 +217,41 @@ def _offer_from_grid_data(data: dict[str, Any], scraped_at: datetime) -> OfferIt
         valid_to=valid_to,
         scraped_at=scraped_at,
     )
+
+
+def _has_promo_signal(price_block: dict[str, Any]) -> bool:
+    """Return True iff ``price_block`` carries any evidence of a real discount.
+
+    A "real" Lidl promo manifests in one of three observable ways:
+
+    1. ``discount.percentageDiscount`` > 0 — explicit "-15%" / "-20%" etc.
+    2. ``discount.discountText`` non-empty and starts with a minus sign
+       — Lidl uses both ASCII '-' and Unicode '−' (U+2212) for "−20%"
+       / "-€2"-style copy.
+    3. ``oldPrice`` (or ``discount.deletedPrice``) set AND strictly
+       greater than ``price`` — the canonical strikethrough shape.
+
+    Cards that satisfy none of these are everyday-shelf-price tiles
+    sharing the same grid markup. We skip them so the ``/offers``
+    surface contains only items that actually went on offer.
+    """
+    sale = to_decimal(price_block.get("price"))
+    if sale is None:
+        return False
+    discount_block = price_block.get("discount") or {}
+    pct = discount_block.get("percentageDiscount")
+    if isinstance(pct, (int, float)) and pct > 0:
+        return True
+    text = discount_block.get("discountText")
+    if isinstance(text, str):
+        stripped = text.strip()
+        # Accept "-20%" / "−20%" / "-€2" / "−€2" copy.
+        if stripped.startswith(("-", "−")) and any(ch.isdigit() for ch in stripped):
+            return True
+    old = to_decimal(price_block.get("oldPrice") or discount_block.get("deletedPrice"))
+    if old is not None and old > sale:
+        return True
+    return False
 
 
 def _pick_price_block(region: dict[str, Any]) -> dict[str, Any] | None:

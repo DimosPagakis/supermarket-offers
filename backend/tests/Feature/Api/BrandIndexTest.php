@@ -18,10 +18,13 @@ class BrandIndexTest extends ApiTestCase
 
         $response = $this->getJson('/api/v1/brands')->assertOk();
 
-        // All 5 seeded brands are now active (Sklavenitis was reactivated
-        // once curl_cffi JA3 impersonation bypassed Akamai — see the
-        // Sklavenitis entry in BrandSeeder for the why).
-        $response->assertJsonCount(5, 'data');
+        // 4 of 5 seeded brands are active. Sklavenitis was deactivated
+        // (2026-05-25 — see BrandSeeder) because its only configured
+        // entry point ships the chain catalogue, not a real flyer.
+        // /api/v1/brands filters on `active=true`, so we expect 4.
+        $response->assertJsonCount(4, 'data');
+        $slugs = array_column($response->json('data'), 'slug');
+        $this->assertNotContains('sklavenitis', $slugs);
 
         $first = $response->json('data.0');
         $this->assertArrayHasKey('id', $first);
@@ -45,8 +48,10 @@ class BrandIndexTest extends ApiTestCase
         $this->authedAsCrawler();
 
         $response = $this->getJson('/api/v1/brands')->assertOk();
-        $response->assertJsonCount(4, 'data');
+        // 5 seeded - 1 already inactive (sklavenitis) - 1 we just flipped (lidl) = 3.
+        $response->assertJsonCount(3, 'data');
         $slugs = array_column($response->json('data'), 'slug');
         $this->assertNotContains('lidl', $slugs);
+        $this->assertNotContains('sklavenitis', $slugs);
     }
 }

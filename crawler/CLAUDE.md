@@ -146,6 +146,24 @@ The right level of paranoia for an MVP.
 
 ---
 
+## Brand status — discounted-only emit policy (2026-05-25)
+
+All per-brand parsers now gate emit on a "real promo signal" — at
+least one of `discount_pct > 0`, `original_price > price`, or a
+non-null `promo_label`. The crawler refuses to leak the chain's
+full catalogue into the public `/offers` endpoint:
+
+| Brand       | Status                | Signal                                                                 |
+|-------------|-----------------------|------------------------------------------------------------------------|
+| ab          | active, gold standard | classified by `_classify_and_build` family (SHT / BXG% / BXGY / EUROS) |
+| lidl        | active                | `discount.percentageDiscount > 0` / minus-prefixed `discountText` / `oldPrice > price` |
+| masoutis    | active                | `Discount` starts with `-` / `StartPrice > PosPrice` (NOT `OfferDescr` — it's populated on catalogue rows too) |
+| my-market   | active                | `span.diagonal-line` strikethrough OR `.offer-note--percent` pill |
+| sklavenitis | **inactive**          | only `.sign-badges` "N+M Δώρο" badge — too narrow; deferred pending a real flyer URL |
+
+If a parser is rewritten and the count crashes to near-zero, check
+the per-brand signal column first before assuming selector drift.
+
 ## Things to push back on if the user asks for them
 
 - Proxy pools, residential IPs, UA rotation — defer until we actually get
