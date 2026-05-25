@@ -10,6 +10,8 @@ use App\Models\Offer;
 use App\Services\ProductResolver;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Throwable;
 
 class CrawlRunOfferController extends Controller
 {
@@ -20,7 +22,13 @@ class CrawlRunOfferController extends Controller
      *
      * Bulk-push scraped offers. Upserts products implicitly (by external_id
      * or normalized_name) and creates one Offer row per item linked to the
-     * run. All-or-nothing transaction.
+     * run. All-or-nothing transaction — if anything throws mid-batch the
+     * entire batch rolls back so the crawler can safely retry.
+     *
+     * The run's final status is NOT mutated here. The crawler owns lifecycle
+     * transitions via PATCH /crawl-runs/{run}; this endpoint stays a pure
+     * idempotent data sink. A 5xx response signals the crawler to retry the
+     * batch or mark the run failed on its own.
      */
     public function store(StoreOffersRequest $request, CrawlRun $run): JsonResponse
     {
@@ -31,31 +39,50 @@ class CrawlRunOfferController extends Controller
         $created = 0;
         $updated = 0;
 
-        DB::transaction(function () use ($payload, $run, $brandId, &$persisted, &$created, &$updated) {
-            foreach ($payload['offers'] as $item) {
-                $result = $this->resolver->resolve($brandId, $item);
+        try {
+            DB::transaction(function () use ($payload, $run, $brandId, &$persisted, &$created, &$updated) {
+                foreach ($payload['offers'] as $item) {
+                    $result = $this->resolver->resolve($brandId, $item);
 
-                if ($result['created']) {
-                    $created++;
-                } elseif ($result['updated']) {
-                    $updated++;
+                    if ($result['created']) {
+                        $created++;
+                    } elseif ($result['updated']) {
+                        $updated++;
+                    }
+
+                    Offer::create([
+                        'product_id' => $result['product']->id,
+                        'crawl_run_id' => $run->id,
+                        'price' => $item['price'],
+                        'original_price' => $item['original_price'] ?? null,
+                        'discount_pct' => $item['discount_pct'] ?? null,
+                        'currency' => $item['currency'] ?? 'EUR',
+                        'valid_from' => $item['valid_from'] ?? null,
+                        'valid_to' => $item['valid_to'] ?? null,
+                        'scraped_at' => $item['scraped_at'],
+                    ]);
+
+                    $persisted++;
                 }
+            });
+        } catch (Throwable $e) {
+            // Transaction is already rolled back by Laravel — nothing was
+            // persisted from this batch. Log with enough context to debug
+            // (run, brand, batch size, exception class) without leaking
+            // payload bodies into logs.
+            Log::error('Offer bulk push failed', [
+                'run_id' => $run->id,
+                'brand_id' => $brandId,
+                'batch_size' => count($payload['offers']),
+                'exception' => $e::class,
+                'message' => $e->getMessage(),
+            ]);
 
-                Offer::create([
-                    'product_id' => $result['product']->id,
-                    'crawl_run_id' => $run->id,
-                    'price' => $item['price'],
-                    'original_price' => $item['original_price'] ?? null,
-                    'discount_pct' => $item['discount_pct'] ?? null,
-                    'currency' => $item['currency'] ?? 'EUR',
-                    'valid_from' => $item['valid_from'] ?? null,
-                    'valid_to' => $item['valid_to'] ?? null,
-                    'scraped_at' => $item['scraped_at'],
-                ]);
-
-                $persisted++;
-            }
-        });
+            return response()->json([
+                'error' => 'offer_push_failed',
+                'message' => 'Failed to persist offer batch; nothing was saved. Safe to retry.',
+            ], 500);
+        }
 
         return (new OfferBulkResultResource([
             'persisted' => $persisted,
