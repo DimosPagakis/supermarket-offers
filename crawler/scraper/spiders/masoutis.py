@@ -39,7 +39,6 @@ shell.
 from __future__ import annotations
 
 import json
-import os
 from datetime import datetime, UTC
 from typing import Any
 
@@ -47,6 +46,7 @@ import scrapy
 from loguru import logger
 
 from scraper.parsers.masoutis import extract_offers_from_payload
+from scraper.spiders._config import max_pages_from_env
 
 MASOUTIS_BASE_URL = "https://www.masoutis.gr"
 MASOUTIS_PROMOS_URL = (
@@ -64,7 +64,7 @@ PAGE_SIZE_HINT = 50
 
 # Safety cap. 62 known pages × 50 items ≈ 3000 catalogue items.
 # Override with ``CRAWLER_MAX_PAGES_MASOUTIS=<N>``.
-MASOUTIS_MAX_PAGES = int(os.getenv("CRAWLER_MAX_PAGES_MASOUTIS", "300"))
+MASOUTIS_MAX_PAGES = max_pages_from_env("MASOUTIS", default=300)
 
 
 class MasoutisSpider(scrapy.Spider):

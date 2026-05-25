@@ -88,7 +88,6 @@ the scheduler can crank it without a code change.
 
 from __future__ import annotations
 
-import os
 import re
 from datetime import datetime, UTC
 from typing import Any
@@ -99,6 +98,7 @@ from loguru import logger
 from scrapy.http import Response
 
 from scraper.parsers.lidl import extract_offers
+from scraper.spiders._config import max_pages_from_env
 
 # Matches Lidl campaign URLs: /c/<theme>-{YY}kw{WW}/a{id}
 # Examples:
@@ -109,7 +109,7 @@ _CAMPAIGN_HREF_RE = re.compile(r"^/c/[^/]+-\d{2}kw\d{1,2}/a\d+/?$")
 
 # Safety cap on campaigns per run. Real catalogue sits well under 50.
 # Override via ``CRAWLER_MAX_PAGES_LIDL=<N>`` if Lidl ever expands.
-LIDL_MAX_CAMPAIGNS = int(os.getenv("CRAWLER_MAX_PAGES_LIDL", "200"))
+LIDL_MAX_CAMPAIGNS = max_pages_from_env("LIDL", default=200)
 
 
 class LidlSpider(scrapy.Spider):

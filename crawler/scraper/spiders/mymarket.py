@@ -35,7 +35,6 @@ cap clips real coverage.
 
 from __future__ import annotations
 
-import os
 from datetime import datetime, UTC
 from typing import Any
 
@@ -44,6 +43,7 @@ from loguru import logger
 from scrapy.http import Response
 
 from scraper.parsers.mymarket import extract_offers, extract_total_pages
+from scraper.spiders._config import max_pages_from_env
 
 MYMARKET_OFFERS_URL = "https://www.mymarket.gr/offers"
 
@@ -51,7 +51,7 @@ MYMARKET_OFFERS_URL = "https://www.mymarket.gr/offers"
 # *actual* stop condition is the ``total_pages`` value the parser reads
 # from page 1; this constant only kicks in if that detection breaks.
 # Override per-environment with ``CRAWLER_MAX_PAGES_MYMARKET=<N>``.
-MYMARKET_MAX_PAGES = int(os.getenv("CRAWLER_MAX_PAGES_MYMARKET", "300"))
+MYMARKET_MAX_PAGES = max_pages_from_env("MYMARKET", default=300)
 
 
 class MyMarketSpider(scrapy.Spider):
