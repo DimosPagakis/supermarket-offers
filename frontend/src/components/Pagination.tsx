@@ -26,9 +26,9 @@ export function Pagination({ currentPage, lastPage, hrefForPage }: Props) {
   const next = currentPage < lastPage ? hrefForPage(currentPage + 1) : null;
 
   const baseBtn =
-    "inline-flex h-9 min-w-9 items-center justify-center rounded-full px-3 text-sm font-medium transition-colors";
-  const navBtn = `${baseBtn} border border-border text-ink-soft hover:bg-brand-fade hover:text-brand`;
-  const disabledBtn = `${baseBtn} border border-border text-ink-muted/50`;
+    "inline-flex h-9 min-w-9 items-center justify-center rounded-[var(--radius-soft-pill)] bg-canvas px-3 text-sm font-medium transition-shadow focus:outline-none focus-visible:ring-2 focus-visible:ring-brand";
+  const navBtn = `${baseBtn} text-ink-soft shadow-raised hover:shadow-raised-lg hover:text-brand active:shadow-inset`;
+  const disabledBtn = `${baseBtn} text-ink-muted/50 shadow-inset`;
 
   return (
     <nav className="flex items-center justify-center gap-1" aria-label="Σελιδοποίηση">
@@ -47,7 +47,7 @@ export function Pagination({ currentPage, lastPage, hrefForPage }: Props) {
         ) : p === currentPage ? (
           <span
             key={p}
-            className={`${baseBtn} bg-brand text-white shadow-sm`}
+            className={`${baseBtn} text-brand font-semibold shadow-inset`}
             aria-current="page"
           >
             {p}
@@ -56,7 +56,7 @@ export function Pagination({ currentPage, lastPage, hrefForPage }: Props) {
           <Link
             key={p}
             href={hrefForPage(p)}
-            className={`${baseBtn} text-ink-soft hover:bg-brand-fade hover:text-brand`}
+            className={`${baseBtn} text-ink-soft shadow-raised hover:shadow-raised-lg hover:text-brand active:shadow-inset`}
           >
             {p}
           </Link>

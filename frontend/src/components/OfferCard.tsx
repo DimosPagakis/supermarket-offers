@@ -29,9 +29,9 @@ export function OfferCard({ offer, priority = false }: Props) {
     <Link
       href={`/offers/${offer.id}`}
       prefetch={false}
-      className="group flex flex-col overflow-hidden rounded-[var(--radius-card)] border border-border bg-surface shadow-card transition hover:-translate-y-0.5 hover:border-brand-soft hover:shadow-card-hover focus:outline-none"
+      className="group flex flex-col overflow-hidden rounded-[var(--radius-soft)] bg-canvas p-3 shadow-raised transition-shadow duration-200 hover:shadow-raised-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
     >
-      <div className="relative aspect-square w-full overflow-hidden bg-canvas-muted">
+      <div className="relative aspect-square w-full overflow-hidden rounded-[var(--radius-soft)] bg-canvas shadow-inset">
         {product.image_url ? (
           <Image
             src={product.image_url}
@@ -53,7 +53,7 @@ export function OfferCard({ offer, priority = false }: Props) {
         )}
       </div>
 
-      <div className="flex flex-1 flex-col gap-2 p-3">
+      <div className="flex flex-1 flex-col gap-2 px-1 pt-3">
         <div className="flex items-center justify-between gap-2">
           <BrandChip brand={brand} />
           {product.category && (

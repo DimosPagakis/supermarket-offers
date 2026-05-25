@@ -4,7 +4,7 @@ const SOURCES = ["AB Βασιλόπουλος", "Σκλαβενίτης", "Lidl 
 
 export function Footer() {
   return (
-    <footer className="mt-12 border-t border-border bg-canvas-muted py-8 text-sm text-ink-muted">
+    <footer className="mt-12 bg-canvas py-8 text-sm text-ink-muted shadow-inset">
       <div className="mx-auto flex max-w-7xl flex-col gap-4 px-4 sm:flex-row sm:justify-between">
         <div>
           <p className="font-semibold text-ink-soft">

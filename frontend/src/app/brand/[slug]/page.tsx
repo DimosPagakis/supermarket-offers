@@ -44,10 +44,10 @@ export default async function BrandPage({
   return (
     <div className="flex flex-col gap-6">
       <div
-        className="rounded-[var(--radius-card)] border border-border bg-surface px-6 py-8 shadow-card"
+        className="rounded-[var(--radius-soft)] bg-canvas px-6 py-8 shadow-raised-lg"
         style={{
           // Soft tinted accent strip on the left edge using the brand's
-          // identity hue — recognisable without dominating the canvas.
+          // identity hue — neumorphism's depth + a thin brand cue.
           borderLeft: `4px solid ${colour.ring}`,
         }}
       >
