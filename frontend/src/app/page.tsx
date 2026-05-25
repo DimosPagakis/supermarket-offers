@@ -5,13 +5,19 @@ import { parseOfferQuery } from "@/lib/search-params";
 export default async function HomePage({ searchParams }: PageProps<"/">) {
   const raw = await searchParams;
   const query = parseOfferQuery(raw);
-  // Homepage: top 50 discounts across all chains. Filters are still
-  // available but the default sort is high-discount-first.
+  // Homepage: 50 offers sorted high-discount-first. We deliberately do
+  // NOT force `has_discount=true` server-side even though the page
+  // title implies it — a hidden default would silently override any
+  // user toggle of "Μόνο εκπτώσεις" in the filter bar (the URL never
+  // carries the value, so clicking the chip off has no observable
+  // effect). The discount-desc sort already pushes real discounts to
+  // the top; if a shopper wants strict "only with discount", the
+  // chip in the bar is the canonical control and they'll see the
+  // count drop accordingly.
   const merged = {
     ...query,
     sort: query.sort ?? "discount_pct",
     dir: query.dir ?? ("desc" as const),
-    has_discount: query.has_discount ?? true,
     per_page: query.per_page ?? 50,
   };
 
