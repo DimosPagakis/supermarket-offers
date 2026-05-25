@@ -8,21 +8,15 @@ Akamai bot-manager rejects naive HTTP clients, see
 
 from __future__ import annotations
 
-from datetime import datetime, UTC
 from decimal import Decimal
-from pathlib import Path
 
 from scraper.items import OfferItem
-from scraper.parsers.sklavenitis import extract_offers
 
-FIXTURE = (
-    Path(__file__).parent / "fixtures" / "sklavenitis" / "listing-page1.html"
-)
-SCRAPED_AT = datetime(2026, 5, 25, 12, 0, 0, tzinfo=UTC)
+from ._fixtures import assert_payload_matches_backend_contract, load_offers
 
 
 def _load_offers() -> list[OfferItem]:
-    return list(extract_offers(FIXTURE.read_text(encoding="utf-8"), SCRAPED_AT))
+    return load_offers("sklavenitis", "listing-page1.html")
 
 
 def test_extracts_one_offer_per_card() -> None:
@@ -80,23 +74,7 @@ def test_units_are_greek_short_forms() -> None:
 
 def test_payload_round_trip_matches_backend_contract() -> None:
     offer = _load_offers()[0]
-    payload = offer.to_payload()
-    for key in (
-        "external_id",
-        "name",
-        "url",
-        "image_url",
-        "category",
-        "unit",
-        "price",
-        "original_price",
-        "discount_pct",
-        "currency",
-        "valid_from",
-        "valid_to",
-        "scraped_at",
-    ):
-        assert key in payload
+    payload = assert_payload_matches_backend_contract(offer)
     # Decimal serialises as float for the JSON wire shape.
     assert payload["price"] == 1.65
     assert payload["original_price"] is None

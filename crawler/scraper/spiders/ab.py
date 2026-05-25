@@ -57,7 +57,6 @@ AB is still under-shipping after the broader-promotion fix.
 from __future__ import annotations
 
 import json
-import os
 from collections import Counter
 from datetime import datetime, UTC
 from typing import Any
@@ -68,6 +67,7 @@ from loguru import logger
 from scrapy.http import Response
 
 from scraper.parsers.ab import EMITTED_FAMILIES, extract_offers_with_family
+from scraper.spiders._config import max_pages_from_env
 
 AB_GRAPHQL_URL = "https://www.ab.gr/api/v1/"
 
@@ -87,7 +87,7 @@ AB_LAZY_LOAD_COUNT = 10
 # reported ``totalPages: 87`` on 2026-05-25; cap a touch higher to be
 # tolerant of catalogue growth without crawling forever on a bug.
 # Override per-environment with ``CRAWLER_MAX_PAGES_AB=<N>``.
-AB_MAX_PAGES = int(os.getenv("CRAWLER_MAX_PAGES_AB", "120"))
+AB_MAX_PAGES = max_pages_from_env("AB", default=120)
 
 
 class AbSpider(scrapy.Spider):

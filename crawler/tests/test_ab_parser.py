@@ -12,21 +12,16 @@ and we recapture the fixture before shipping.
 
 from __future__ import annotations
 
-from datetime import date, datetime, UTC
+from datetime import date
 from decimal import Decimal
-from pathlib import Path
 
 from scraper.items import OfferItem
-from scraper.parsers.ab import extract_offers
 
-FIXTURE = (
-    Path(__file__).parent / "fixtures" / "ab" / "productlist-page0.json"
-)
-SCRAPED_AT = datetime(2026, 5, 25, 12, 0, 0, tzinfo=UTC)
+from ._fixtures import assert_payload_matches_backend_contract, load_offers
 
 
 def _load_offers() -> list[OfferItem]:
-    return list(extract_offers(FIXTURE.read_text(encoding="utf-8"), SCRAPED_AT))
+    return load_offers("ab", "productlist-page0.json")
 
 
 def test_filters_loyalty_only_promos() -> None:
@@ -85,24 +80,7 @@ def test_payload_round_trip_matches_backend_contract() -> None:
     """`OfferItem.to_payload()` must yield the keys the backend FormRequest
     validates against."""
     offer = _load_offers()[0]
-    payload = offer.to_payload()
-
-    for key in (
-        "external_id",
-        "name",
-        "url",
-        "image_url",
-        "category",
-        "unit",
-        "price",
-        "original_price",
-        "discount_pct",
-        "currency",
-        "valid_from",
-        "valid_to",
-        "scraped_at",
-    ):
-        assert key in payload, f"missing key in offer payload: {key}"
+    payload = assert_payload_matches_backend_contract(offer)
 
     assert payload["price"] == 6.08
     assert payload["original_price"] == 7.15

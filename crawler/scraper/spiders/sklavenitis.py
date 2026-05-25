@@ -31,13 +31,13 @@ Trade-offs vs. a Playwright bootstrap:
 from __future__ import annotations
 
 import asyncio
-import os
 from datetime import datetime, UTC
 
 import scrapy
 from loguru import logger
 
 from scraper.parsers.sklavenitis import extract_offers
+from scraper.spiders._config import max_pages_from_env
 
 SKLAVENITIS_BASE_URL = "https://www.sklavenitis.gr"
 SKLAVENITIS_OFFERS_PATH = "/sylloges/prosfores/"
@@ -47,7 +47,7 @@ SKLAVENITIS_OFFERS_PATH = "/sylloges/prosfores/"
 # Override at runtime with ``CRAWLER_MAX_PAGES_SKLAVENITIS=<N>`` (e.g.
 # drop to 5 for a fast smoke run, raise if Sklavenitis grows their
 # catalogue past ~7000 items).
-SKLAVENITIS_MAX_PAGES = int(os.getenv("CRAWLER_MAX_PAGES_SKLAVENITIS", "300"))
+SKLAVENITIS_MAX_PAGES = max_pages_from_env("SKLAVENITIS", default=300)
 
 # Akamai-friendly: behave like a real browser tab opened from the
 # homepage. Anything more aggressive risks waking the WAF.
