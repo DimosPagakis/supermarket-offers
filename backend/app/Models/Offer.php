@@ -16,10 +16,29 @@ class Offer extends Model
         'price',
         'original_price',
         'discount_pct',
+        'promo_label',
+        'promo_type',
         'currency',
         'valid_from',
         'valid_to',
         'scraped_at',
+    ];
+
+    /**
+     * Allowed values for the structured `promo_type` column.
+     *
+     * Stays in sync with {@see \App\Http\Requests\Api\V1\StoreOffersRequest}.
+     * `loyalty_points` is reserved for future use — we don't currently emit
+     * loyalty-only offers (see `crawler/scraper/parsers/ab.py` family
+     * docstring) but keeping it on the enum means a parser change doesn't
+     * need a backend migration.
+     */
+    public const PROMO_TYPES = [
+        'strikethrough',
+        'bxgy_free',
+        'bxg_percent',
+        'discount_euros',
+        'loyalty_points',
     ];
 
     protected $casts = [

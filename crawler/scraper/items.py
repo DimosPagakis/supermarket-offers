@@ -29,6 +29,16 @@ class OfferItem(BaseModel):
     original_price: Decimal | None = None
     discount_pct: int | None = Field(default=None, ge=0, le=100)
 
+    # Human-readable Greek promo badge text (e.g. "1+1 δώρο", "-30% στα 2",
+    # "Κέρδος 15%"). Surfaces verbatim on the frontend; carries the savings
+    # narrative for multi-buy deals where the per-unit `price` is the
+    # regular shelf price (see scraper/parsers/ab.py family docstring).
+    promo_label: str | None = Field(default=None, max_length=80)
+    # Structured kind of promotion. Mirrors the backend's PROMO_TYPES enum:
+    #   strikethrough | bxgy_free | bxg_percent | discount_euros | loyalty_points
+    # Use this for branching client-side logic; use `promo_label` for display.
+    promo_type: str | None = Field(default=None, max_length=32)
+
     currency: str = "EUR"
 
     valid_from: date | None = None

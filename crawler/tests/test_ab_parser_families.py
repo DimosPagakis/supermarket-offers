@@ -59,29 +59,47 @@ def _by_code(items: list[tuple[str, OfferItem | None]]) -> dict[str, tuple[str, 
 def test_strikethrough_offer_still_emits_with_eggs_values() -> None:
     """The 282-product strikethrough baseline must keep working. The eggs
     product from the original fixture survives in the curated set; lock
-    in the same price/original/pct values the legacy test asserts."""
+    in the same price/original/pct values the legacy test asserts and
+    the new promo_label / promo_type enrichment that ships alongside."""
     items = _load(FIXTURE_FAMILIES)
     eggs = next(off for fam, off in items if off and off.external_id == "7606160")
     assert eggs.price == Decimal("6.08")
     assert eggs.original_price == Decimal("7.15")
     assert eggs.discount_pct == 15
+    # SHT is the one family where the legacy maths is honest, so the row
+    # carries BOTH the numeric pct AND the brand's badge title. The FE
+    # will prefer the label when both are present.
+    assert eggs.promo_type == "strikethrough"
+    assert eggs.promo_label is not None
+    assert "%" in eggs.promo_label
 
 
 # --- BXG% (Buy X Get Percentage Off, no strikethrough) -------------------
 
 
-def test_buy_x_get_percent_off_emits_conditional_unit_price() -> None:
+def test_buy_x_get_percent_off_emits_shelf_price_with_label() -> None:
     """Product 7132459 is a 400g pack of peas on a "-30% στα 2" deal.
-    Original 2.14€, expected effective per-unit = 2.14 × 0.70 = 1.498
-    which rounds to 1.50."""
+
+    Pre-2026-05-25 we quoted the per-unit effective price (1.50€) which
+    misled shoppers — at the till one unit rings up at 2.14€, the -30%
+    only triggers once the basket holds two. We now emit the regular
+    shelf price as ``price``, leave ``original_price`` / ``discount_pct``
+    null, and carry the savings narrative in ``promo_label``.
+    """
     items = _load(FIXTURE_FAMILIES)
     found = [(fam, off) for fam, off in items if off and off.external_id == "7132459"]
     assert len(found) == 1
     fam, peas = found[0]
     assert fam == FAMILY_BXG_PCT
-    assert peas.original_price == Decimal("2.14")
-    assert peas.price == Decimal("1.50")
-    assert peas.discount_pct == 30
+    # The shelf price wins. Multi-buy effective per-unit is a lie at the
+    # single-unit till.
+    assert peas.price == Decimal("2.14")
+    assert peas.original_price is None
+    assert peas.discount_pct is None
+    # The brand's own copy is what shoppers see on the AB page.
+    assert peas.promo_type == "bxg_percent"
+    assert peas.promo_label is not None
+    assert "30" in peas.promo_label and "%" in peas.promo_label
     # Multi-buy promos still carry their start/end dates.
     assert peas.valid_from is not None
     assert peas.valid_to is not None
@@ -90,39 +108,60 @@ def test_buy_x_get_percent_off_emits_conditional_unit_price() -> None:
 # --- BXGY (Buy X Get Y free) ---------------------------------------------
 
 
-def test_one_plus_one_free_halves_the_price() -> None:
+def test_one_plus_one_free_emits_shelf_price_with_bxgy_label() -> None:
     """Product 7125700 is a "1 + 1 free" cereal bar at 3.80€.
-    Effective per-unit = 1.90€, discount_pct = 50."""
+
+    Repro case for the bug: AB's site shows the shopper "€3.80" with a
+    "1+1 δώρο" sticker. The old behaviour quoted the effective per-unit
+    "€1.90" with a -50% pill on our card and the shopper felt misled
+    when they clicked through. We now emit the shelf price + the
+    verbatim badge label.
+    """
     items = _load(FIXTURE_FAMILIES)
     bars = next(off for fam, off in items if off and off.external_id == "7125700")
-    assert bars.original_price == Decimal("3.80")
-    assert bars.price == Decimal("1.90")
-    assert bars.discount_pct == 50
+    assert bars.price == Decimal("3.80")
+    assert bars.original_price is None
+    assert bars.discount_pct is None
+    assert bars.promo_type == "bxgy_free"
+    assert bars.promo_label is not None
+    # Title is "1 + 1 free" / "1 + 1 δώρο" — we keep it verbatim.
+    assert "1" in bars.promo_label and "+" in bars.promo_label
 
 
-def test_three_plus_one_free_parses_paid_free_from_title() -> None:
+def test_three_plus_one_free_emits_shelf_price_with_bxgy_label() -> None:
     """Product 7085201 has ``qualifyingCount=4`` and ``freeCount=None`` —
-    the "3 + 1 free" structure is only in the title. Parser must fall
-    back to title regex. Effective per-unit = 0.95 × 3/4 = 0.7125 → 0.71."""
+    the "3 + 1 free" structure is only in the title. The parser still
+    parses (paid, free) as a malformed-promo gate, but no longer uses
+    them to compute an effective per-unit price."""
     items = _load(FIXTURE_FAMILIES)
     cat_food = next(off for fam, off in items if off and off.external_id == "7085201")
-    assert cat_food.original_price == Decimal("0.95")
-    assert cat_food.price == Decimal("0.71")
-    assert cat_food.discount_pct == 25  # 1/4 free
+    assert cat_food.price == Decimal("0.95")
+    assert cat_food.original_price is None
+    assert cat_food.discount_pct is None
+    assert cat_food.promo_type == "bxgy_free"
+    assert cat_food.promo_label is not None
+    assert "3" in cat_food.promo_label and "+" in cat_food.promo_label
 
 
 # --- DISCOUNT_EUROS ------------------------------------------------------
 
 
-def test_discount_euros_for_y_articles_pulls_amount_from_title() -> None:
+def test_discount_euros_for_y_articles_emits_shelf_price_with_label() -> None:
     """Product 7084612: olive sauce 3.18€ on "-0.8€ στα 2".
-    Per-unit off = 0.4€, effective price = 2.78€."""
+
+    Same fix-direction as BXG% / BXGY: shelf price wins, label
+    carries the deal. Per-unit effective maths would lie when the
+    shopper buys one.
+    """
     items = _load(FIXTURE_FAMILIES)
     sauce = next(off for fam, off in items if off and off.external_id == "7084612")
-    assert sauce.original_price == Decimal("3.18")
-    assert sauce.price == Decimal("2.78")
-    # discount_pct = (3.18 - 2.78) / 3.18 = 12.58% → rounded to 13.
-    assert sauce.discount_pct == 13
+    assert sauce.price == Decimal("3.18")
+    assert sauce.original_price is None
+    assert sauce.discount_pct is None
+    assert sauce.promo_type == "discount_euros"
+    assert sauce.promo_label is not None
+    # Title is "-0.8€ στα 2" or similar — must mention the euro sign.
+    assert "€" in sauce.promo_label
 
 
 # --- loyalty families: counted but not emitted ---------------------------

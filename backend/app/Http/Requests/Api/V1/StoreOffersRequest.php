@@ -3,8 +3,10 @@
 namespace App\Http\Requests\Api\V1;
 
 use App\Models\CrawlRun;
+use App\Models\Offer;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 class StoreOffersRequest extends FormRequest
 {
@@ -41,6 +43,8 @@ class StoreOffersRequest extends FormRequest
             'offers.*.price' => ['required', 'numeric', 'min:0'],
             'offers.*.original_price' => ['nullable', 'numeric', 'min:0'],
             'offers.*.discount_pct' => ['nullable', 'integer', 'min:0', 'max:100'],
+            'offers.*.promo_label' => ['nullable', 'string', 'max:80'],
+            'offers.*.promo_type' => ['nullable', 'string', 'max:32', Rule::in(Offer::PROMO_TYPES)],
             'offers.*.currency' => ['nullable', 'string', 'size:3'],
             'offers.*.valid_from' => ['nullable', 'date_format:Y-m-d'],
             'offers.*.valid_to' => ['nullable', 'date_format:Y-m-d'],

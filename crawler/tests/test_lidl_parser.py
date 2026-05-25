@@ -81,6 +81,12 @@ def test_first_offer_maps_all_critical_fields() -> None:
     # Packaging string lands in `unit`.
     assert first.unit == "208 φύλλα (720 g)"
 
+    # Lidl exposes single-unit discounts only — we synthesise a
+    # "−{N}%" label and tag the row as `strikethrough` so the FE pill
+    # gets to render the brand-supplied savings copy.
+    assert first.promo_type == "strikethrough"
+    assert first.promo_label == "−30%"
+
 
 def test_handles_offer_without_discount_block() -> None:
     """Item #2 in the fixture (Κοπανάκι κοτόπουλο XXL) has a price but no
@@ -94,6 +100,9 @@ def test_handles_offer_without_discount_block() -> None:
     assert target.price == Decimal("4.49")
     assert target.original_price is None
     assert target.discount_pct is None
+    # No discount block → neither field is populated either.
+    assert target.promo_label is None
+    assert target.promo_type is None
 
 
 def test_offers_are_deduplicated_by_external_id() -> None:

@@ -61,6 +61,8 @@ BACKEND_PAYLOAD_KEYS: frozenset[str] = frozenset({
     "price",
     "original_price",
     "discount_pct",
+    "promo_label",
+    "promo_type",
     "currency",
     "valid_from",
     "valid_to",

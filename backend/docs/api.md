@@ -125,6 +125,8 @@ Body:
       "price": "4.99",
       "original_price": "6.49",
       "discount_pct": 23,
+      "promo_label": "Κέρδος 23%",
+      "promo_type": "strikethrough",
       "currency": "EUR",
       "valid_from": "2026-05-25",
       "valid_to": "2026-05-31",
@@ -147,6 +149,8 @@ Field reference:
 | `price` | decimal | Required. ≥ 0. |
 | `original_price` | decimal\|null | |
 | `discount_pct` | int 0–100\|null | |
+| `promo_label` | string\|null, ≤ 80 chars | Brand-supplied Greek badge text (e.g. `"1+1 δώρο"`). Verbatim; advisory display copy. |
+| `promo_type` | string\|null, ≤ 32 chars | One of `strikethrough`, `bxgy_free`, `bxg_percent`, `discount_euros`, `loyalty_points`. |
 | `currency` | string len 3 | Defaults to `EUR`. |
 | `valid_from` | `Y-m-d`\|null | |
 | `valid_to` | `Y-m-d`\|null | |

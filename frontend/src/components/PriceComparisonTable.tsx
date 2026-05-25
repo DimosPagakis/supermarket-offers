@@ -92,13 +92,24 @@ export function PriceComparisonTable({ offers }: Props) {
                     : "—"}
                 </td>
                 <td className="hidden px-4 py-3 text-right sm:table-cell">
-                  {offer.discount_pct != null && offer.discount_pct > 0 ? (
-                    <span className="rounded-full bg-accent px-2 py-0.5 text-xs font-semibold text-white">
-                      -{offer.discount_pct}%
-                    </span>
-                  ) : (
-                    <span className="text-ink-muted">—</span>
-                  )}
+                  {(() => {
+                    // Same promo-pill precedence as OfferCard: prefer the
+                    // brand-supplied `promo_label` over the reconstructed
+                    // "-N%" when both are present; fall back to the raw
+                    // pct for legacy data; render an em-dash otherwise.
+                    const badge = offer.promo_label
+                      ? offer.promo_label
+                      : offer.discount_pct != null && offer.discount_pct > 0
+                        ? `-${offer.discount_pct}%`
+                        : null;
+                    return badge ? (
+                      <span className="rounded-full bg-accent px-2 py-0.5 text-xs font-semibold text-white">
+                        {badge}
+                      </span>
+                    ) : (
+                      <span className="text-ink-muted">—</span>
+                    );
+                  })()}
                 </td>
                 <td className="hidden px-4 py-3 text-ink-soft md:table-cell">
                   {offer.valid_to ? formatDate(offer.valid_to) : "—"}

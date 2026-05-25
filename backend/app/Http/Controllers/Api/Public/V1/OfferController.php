@@ -100,12 +100,14 @@ class OfferController extends Controller
                 ->orderByDesc('scraped_at')
                 ->orderByDesc('id')
                 ->limit(200)
-                ->get(['id', 'price', 'original_price', 'discount_pct', 'currency', 'scraped_at'])
+                ->get(['id', 'price', 'original_price', 'discount_pct', 'promo_label', 'promo_type', 'currency', 'scraped_at'])
                 ->map(fn (Offer $row) => [
                     'id' => (int) $row->id,
                     'price' => $row->price !== null ? (float) $row->price : null,
                     'original_price' => $row->original_price !== null ? (float) $row->original_price : null,
                     'discount_pct' => $row->discount_pct !== null ? (int) $row->discount_pct : null,
+                    'promo_label' => $row->promo_label,
+                    'promo_type' => $row->promo_type,
                     'currency' => $row->currency,
                     'scraped_at' => $row->scraped_at?->toIso8601String(),
                 ])
