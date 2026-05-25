@@ -1,8 +1,9 @@
 "use client";
 
-import { useRouter, useSearchParams, usePathname } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useTransition } from "react";
+import { useSearchParams } from "next/navigation";
+import { useMemo } from "react";
 import { brandColour } from "@/lib/brand-colours";
+import { toggleInCsv, useUrlFilters } from "@/lib/use-url-filters";
 import type { Brand, CanonicalSortField } from "@/lib/types";
 
 type Props = {
@@ -11,15 +12,6 @@ type Props = {
   /** Hard upper bound for `min_brands` — usually the number of chains we crawl. */
   maxBrands?: number;
 };
-
-function toggleInCsv(csv: string | null, value: string): string {
-  const set = new Set(
-    (csv ?? "").split(",").map((s) => s.trim()).filter(Boolean),
-  );
-  if (set.has(value)) set.delete(value);
-  else set.add(value);
-  return Array.from(set).join(",");
-}
 
 const SORT_OPTIONS: Array<{ value: CanonicalSortField; label: string }> = [
   { value: "brands_count", label: "Περισσότερες αλυσίδες" },
@@ -38,10 +30,8 @@ export function CanonicalFiltersBar({
   categories,
   maxBrands = 5,
 }: Props) {
-  const router = useRouter();
-  const pathname = usePathname();
   const searchParams = useSearchParams();
-  const [pending, startTransition] = useTransition();
+  const { pending, updateParam, reset } = useUrlFilters();
 
   const selectedBrands = useMemo(
     () =>
@@ -66,39 +56,6 @@ export function CanonicalFiltersBar({
     (selectedCategory ? 1 : 0) +
     (minBrands > 2 ? 1 : 0) +
     (selectedSort !== "brands_count" ? 1 : 0);
-
-  // Track the last URL we *intended* to navigate to, regardless of whether
-  // the router has finished committing it. Rapid clicks (e.g. brand chip +
-  // min-brands pill, fired in the same tick) must compose: each handler
-  // needs to see the *pending* URL, not the one in `searchParams` (held by
-  // React's transition snapshot) nor the one in `window.location` (which
-  // the router updates asynchronously after the transition commits).
-  const pendingSearchRef = useRef<string>(`?${searchParams.toString()}`);
-  useEffect(() => {
-    // Re-sync whenever the URL changes for *any* reason — back/forward,
-    // page navigation, programmatic update from elsewhere.
-    pendingSearchRef.current = `?${searchParams.toString()}`;
-  }, [searchParams]);
-
-  const updateParam = useCallback(
-    (mutate: (sp: URLSearchParams) => void) => {
-      const sp = new URLSearchParams(pendingSearchRef.current);
-      mutate(sp);
-      sp.delete("page");
-      const qs = sp.toString();
-      // Commit to the ref *synchronously* so the very next click in the
-      // same tick reads this URL as its base, instead of clobbering it.
-      pendingSearchRef.current = qs ? `?${qs}` : "";
-      startTransition(() => {
-        // `push` (not `replace`) so browser back/forward step through the
-        // filter history. `scroll: false` keeps the user anchored to the
-        // grid — without it Next would jump the viewport to the top on
-        // every filter change and the bar would appear unresponsive.
-        router.push(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
-      });
-    },
-    [router, pathname],
-  );
 
   const onToggleBrand = (slug: string) =>
     updateParam((sp) => {
@@ -128,16 +85,7 @@ export function CanonicalFiltersBar({
       else sp.delete("dir");
     });
 
-  const onReset = () => {
-    updateParam((sp) => {
-      const q = sp.get("q");
-      // Collect keys first — `URLSearchParams.forEach` + `delete` mutate
-      // the underlying list mid-iteration and skip entries.
-      const keys = Array.from(sp.keys());
-      for (const key of keys) sp.delete(key);
-      if (q) sp.set("q", q);
-    });
-  };
+  const onReset = reset;
 
   return (
     <section
