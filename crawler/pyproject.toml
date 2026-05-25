@@ -1,0 +1,44 @@
+[project]
+name = "supermarket-offers-crawler"
+version = "0.1.0"
+description = "Scrapy crawler skeleton for Greek supermarket offer aggregator."
+readme = "README.md"
+requires-python = ">=3.12"
+authors = [{ name = "Dimos Pagakis", email = "dipa@monta.com" }]
+dependencies = [
+    "scrapy>=2.11,<3.0",
+    "scrapy-playwright>=0.0.40,<0.1",
+    "httpx>=0.27,<0.28",
+    "pydantic>=2.7,<3.0",
+    "python-dotenv>=1.0,<2.0",
+    "loguru>=0.7,<0.8",
+    "tenacity>=8.2,<9.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8,<9",
+    "pytest-asyncio>=0.23,<1.0",
+    "ruff>=0.4",
+    "mypy>=1.10",
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["scraper", "scraper.clients", "scraper.spiders"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B"]
+ignore = ["E501"]
