@@ -41,7 +41,7 @@ export default function AboutPage() {
         ή εργαλείο ανάλυσης τιμών — μπορείς να χτυπήσεις τα ίδια endpoints που
         χρησιμοποιεί και αυτό το site:
       </p>
-      <pre className="mt-3 overflow-x-auto rounded-[var(--radius-card)] border border-border bg-canvas-muted p-4 text-xs text-ink">
+      <pre className="mt-3 overflow-x-auto rounded-[var(--radius-soft)] bg-canvas p-4 text-xs text-ink shadow-inset">
 {`GET /api/public/v1/offers
 GET /api/public/v1/offers/{id}
 GET /api/public/v1/brands

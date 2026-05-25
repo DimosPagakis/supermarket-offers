@@ -13,13 +13,10 @@ export function BrandChip({ brand, href, size = "sm" }: Props) {
   const padding = size === "sm" ? "px-2 py-0.5 text-xs" : "px-3 py-1 text-sm";
   const chip = (
     <span
-      className={`inline-flex items-center rounded-full font-medium ring-1 ring-inset ${padding}`}
+      className={`inline-flex items-center rounded-[var(--radius-soft-pill)] font-medium shadow-raised-sm ${padding}`}
       style={{
         backgroundColor: colour.bg,
         color: colour.fg,
-        // Subtle ring matches the brand identity hue at low alpha;
-        // keeps chips readable against the seasalt canvas.
-        boxShadow: `inset 0 0 0 1px ${colour.ring}26`,
       }}
       aria-label={`Αλυσίδα: ${brand.name}`}
     >

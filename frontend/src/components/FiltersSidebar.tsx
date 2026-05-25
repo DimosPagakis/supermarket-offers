@@ -2,7 +2,6 @@
 
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { useCallback, useMemo, useState, useTransition } from "react";
-import { brandColour } from "@/lib/brand-colours";
 import type { Brand } from "@/lib/types";
 
 type Props = {
@@ -104,7 +103,7 @@ export function FiltersSidebar({ brands, categories, lockedBrand }: Props) {
 
   return (
     <aside
-      className={`flex flex-col gap-6 rounded-[var(--radius-card)] border border-border bg-surface p-4 shadow-card ${pending ? "opacity-70" : ""}`}
+      className={`flex flex-col gap-6 rounded-[var(--radius-soft)] bg-canvas p-6 shadow-raised ${pending ? "opacity-70" : ""}`}
     >
       <div className="flex items-center justify-between">
         <h2 className="text-sm font-semibold text-ink">Φίλτρα</h2>
@@ -127,7 +126,6 @@ export function FiltersSidebar({ brands, categories, lockedBrand }: Props) {
             const active = lockedBrand
               ? b.slug === lockedBrand
               : selectedBrands.has(b.slug);
-            const colour = brandColour(b.slug);
             return (
               <button
                 key={b.slug}
@@ -135,20 +133,11 @@ export function FiltersSidebar({ brands, categories, lockedBrand }: Props) {
                 onClick={() => onToggleBrand(b.slug)}
                 disabled={!!lockedBrand}
                 aria-pressed={active}
-                className={`rounded-full px-3 py-1 text-xs font-medium transition-colors disabled:cursor-not-allowed ${
+                className={`rounded-[var(--radius-soft-pill)] bg-canvas px-3 py-1.5 text-xs font-medium transition-shadow disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-brand ${
                   active
-                    ? "ring-2"
-                    : "border border-border hover:bg-canvas-muted"
+                    ? "text-brand shadow-inset"
+                    : "text-ink-soft shadow-raised-sm hover:shadow-raised"
                 }`}
-                style={
-                  active
-                    ? {
-                        backgroundColor: colour.bg,
-                        color: colour.fg,
-                        boxShadow: `inset 0 0 0 1px ${colour.ring}`,
-                      }
-                    : { color: "var(--color-ink-soft)" }
-                }
               >
                 {b.name}
               </button>
@@ -168,7 +157,7 @@ export function FiltersSidebar({ brands, categories, lockedBrand }: Props) {
           id="category"
           value={selectedCategory}
           onChange={(e) => onChangeCategory(e.target.value)}
-          className="w-full rounded-md border border-border bg-surface px-3 py-2 text-sm text-ink focus:border-brand focus:outline-none"
+          className="w-full rounded-[var(--radius-soft)] bg-canvas px-3 py-2 text-sm text-ink shadow-inset focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
         >
           <option value="">Όλες οι κατηγορίες</option>
           {categories.map((c) => (
@@ -217,7 +206,7 @@ export function FiltersSidebar({ brands, categories, lockedBrand }: Props) {
           type="checkbox"
           checked={validToday}
           onChange={onToggleHasDiscount}
-          className="h-4 w-4 rounded border-border accent-brand"
+          className="h-4 w-4 rounded accent-brand"
         />
         Μόνο με έκπτωση
       </label>
@@ -226,7 +215,7 @@ export function FiltersSidebar({ brands, categories, lockedBrand }: Props) {
         <button
           type="button"
           onClick={onReset}
-          className="rounded-full px-3 py-2 text-xs font-medium text-brand transition-colors hover:bg-brand-fade"
+          className="rounded-[var(--radius-soft-pill)] bg-canvas px-3 py-2 text-xs font-medium text-brand transition-shadow hover:shadow-raised active:shadow-inset focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
         >
           Καθαρισμός φίλτρων
         </button>

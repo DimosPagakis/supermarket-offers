@@ -22,7 +22,7 @@ export default function GlobalError({
       <button
         onClick={reset}
         type="button"
-        className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-500"
+        className="rounded-[var(--radius-soft-pill)] bg-brand px-5 py-2 text-sm font-semibold text-white shadow-raised-brand transition-shadow hover:bg-brand-hover active:shadow-inset focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
       >
         Επανάληψη
       </button>

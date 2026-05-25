@@ -41,7 +41,7 @@ export function PriceHistoryChart({ history, currency = "EUR" }: Props) {
       : "";
 
   return (
-    <div className="rounded-[var(--radius-card)] border border-border bg-surface p-4 shadow-card">
+    <div className="rounded-[var(--radius-soft)] bg-canvas p-5 shadow-raised">
       <h2 className="mb-3 text-sm font-semibold text-ink-soft">
         Ιστορικό τιμής
       </h2>

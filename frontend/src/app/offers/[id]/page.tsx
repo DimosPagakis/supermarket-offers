@@ -59,7 +59,7 @@ export default async function OfferDetailPage({
       </nav>
 
       <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-        <div className="relative aspect-square overflow-hidden rounded-[var(--radius-card)] border border-border bg-surface shadow-card">
+        <div className="relative aspect-square overflow-hidden rounded-[var(--radius-soft)] bg-canvas shadow-raised-lg">
           {product.image_url ? (
             <Image
               src={product.image_url}
@@ -138,7 +138,7 @@ export default async function OfferDetailPage({
               href={product.url}
               target="_blank"
               rel="noreferrer noopener"
-              className="mt-2 inline-flex items-center justify-center rounded-full bg-accent px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-accent-hover"
+              className="mt-2 inline-flex items-center justify-center rounded-[var(--radius-soft-pill)] bg-accent px-5 py-2.5 text-sm font-semibold text-white shadow-raised-accent transition-shadow hover:bg-accent-hover active:shadow-inset focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
             >
               Δες στο {brand.name} ↗
             </a>

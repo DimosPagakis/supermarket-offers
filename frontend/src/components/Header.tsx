@@ -4,7 +4,7 @@ import { SearchForm } from "./SearchForm";
 
 export function Header() {
   return (
-    <header className="sticky top-0 z-20 border-b border-border bg-surface/90 backdrop-blur">
+    <header className="sticky top-0 z-20 bg-canvas shadow-raised">
       <div className="mx-auto flex max-w-7xl flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-4">
           <Link
