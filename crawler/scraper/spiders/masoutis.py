@@ -40,7 +40,7 @@ from __future__ import annotations
 
 import json
 import os
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from typing import Any
 
 import scrapy
@@ -91,7 +91,7 @@ class MasoutisSpider(scrapy.Spider):
         which is what we exploit here — the spider has no HTTP fetching
         of its own, the catalogue arrives via the bootstrap browser.
         """
-        scraped_at = datetime.now(timezone.utc)
+        scraped_at = datetime.now(UTC)
         total_pages_seen = 0
         total_items = 0
 

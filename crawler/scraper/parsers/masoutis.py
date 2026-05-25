@@ -18,13 +18,14 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Iterable
 from datetime import datetime
-from decimal import Decimal, InvalidOperation
-from typing import Any, Iterable
+from typing import Any
 
 from loguru import logger
 
 from scraper.items import OfferItem
+from scraper.normalize import to_decimal
 
 MASOUTIS_BASE_URL = "https://www.masoutis.gr"
 
@@ -65,11 +66,11 @@ def _offer_from_product(
     product: dict[str, Any], scraped_at: datetime
 ) -> OfferItem | None:
     # PosPrice is the current sale price; StartPrice is the regular price.
-    sale_price = _to_decimal(product.get("PosPrice"))
+    sale_price = to_decimal(product.get("PosPrice"))
     if sale_price is None or sale_price <= 0:
         return None
 
-    original_price = _to_decimal(product.get("StartPrice"))
+    original_price = to_decimal(product.get("StartPrice"))
     # Defensive: if Masoutis ever ships a record with StartPrice == PosPrice
     # or 0, treat as no original price rather than misreport.
     if original_price is not None and original_price <= sale_price:
@@ -147,10 +148,3 @@ def _parse_discount_pct(raw: Any) -> int | None:
     return None
 
 
-def _to_decimal(value: Any) -> Decimal | None:
-    if value is None:
-        return None
-    try:
-        return Decimal(str(value))
-    except (InvalidOperation, ValueError):
-        return None

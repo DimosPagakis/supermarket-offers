@@ -6,7 +6,7 @@ Run against a committed snapshot of page 1 of ``/offers`` captured
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from decimal import Decimal
 from pathlib import Path
 
@@ -16,7 +16,7 @@ from scraper.parsers.mymarket import extract_offers, extract_total_pages
 FIXTURE = (
     Path(__file__).parent / "fixtures" / "mymarket" / "listing-page1.html"
 )
-SCRAPED_AT = datetime(2026, 5, 25, 12, 0, 0, tzinfo=timezone.utc)
+SCRAPED_AT = datetime(2026, 5, 25, 12, 0, 0, tzinfo=UTC)
 
 
 def _load_offers() -> list[OfferItem]:

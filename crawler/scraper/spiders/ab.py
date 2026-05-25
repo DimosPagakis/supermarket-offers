@@ -59,7 +59,7 @@ from __future__ import annotations
 import json
 import os
 from collections import Counter
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from typing import Any
 from urllib.parse import urlencode
 
@@ -170,7 +170,7 @@ class AbSpider(scrapy.Spider):
             self._first_total_pages = total_pages
         self._last_page_reached = max(self._last_page_reached, page_number)
 
-        scraped_at = datetime.now(timezone.utc)
+        scraped_at = datetime.now(UTC)
         emitted = 0
         page_families: Counter[str] = Counter()
         for family, offer in extract_offers_with_family(payload, scraped_at):

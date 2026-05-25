@@ -8,7 +8,7 @@ Akamai bot-manager rejects naive HTTP clients, see
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from decimal import Decimal
 from pathlib import Path
 
@@ -18,7 +18,7 @@ from scraper.parsers.sklavenitis import extract_offers
 FIXTURE = (
     Path(__file__).parent / "fixtures" / "sklavenitis" / "listing-page1.html"
 )
-SCRAPED_AT = datetime(2026, 5, 25, 12, 0, 0, tzinfo=timezone.utc)
+SCRAPED_AT = datetime(2026, 5, 25, 12, 0, 0, tzinfo=UTC)
 
 
 def _load_offers() -> list[OfferItem]:

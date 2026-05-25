@@ -57,13 +57,15 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Iterable
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
-from typing import Any, Iterable
+from typing import Any
 
 from loguru import logger
 
 from scraper.items import OfferItem
+from scraper.normalize import to_decimal
 
 # Absolute URL prefix for product `url` and `images[].url` (both come back
 # as site-relative paths from the GraphQL API).
@@ -120,7 +122,7 @@ def extract_offers_from_payload(
     classification (the spider does, to surface a histogram in
     ``closed()``).
     """
-    for family, offer in extract_offers_with_family(payload, scraped_at):
+    for _family, offer in extract_offers_with_family(payload, scraped_at):
         if offer is not None:
             yield offer
 
@@ -216,22 +218,28 @@ def _pick_offer_promotion(
         elif p.get("toDisplay") and not by_type[t].get("toDisplay"):
             by_type[t] = p
 
-    if "Buy X Get Percentage Off All Products" in by_type:
-        return by_type["Buy X Get Percentage Off All Products"], FAMILY_BXG_PCT
-    if "Grocery Buy X get Y free" in by_type:
-        return by_type["Grocery Buy X get Y free"], FAMILY_BXGY_FREE
-    if "Discount X Euros For Y Articles" in by_type:
-        return by_type["Discount X Euros For Y Articles"], FAMILY_DISCOUNT_EUROS
-    if "Fixed Points For Threshold Promotion" in by_type:
-        return by_type["Fixed Points For Threshold Promotion"], FAMILY_FIXED_POINTS
-    if "X Plus points for Y articles" in by_type:
-        return by_type["X Plus points for Y articles"], FAMILY_PLUS_POINTS
+    for promo_type, family in _AB_PROMO_PRIORITY:
+        if promo_type in by_type:
+            return by_type[promo_type], family
 
     # Everything else — including "Grocery Multi-buy" variants we haven't
     # specifically modelled. Log once at DEBUG so we notice new families.
-    unknown_types = sorted(by_type.keys())
-    logger.debug("ab-parser: skipping unknown promotion families: {}", unknown_types)
+    logger.debug(
+        "ab-parser: skipping unknown promotion families: {}",
+        sorted(by_type.keys()),
+    )
     return None, FAMILY_UNKNOWN
+
+
+# AB promotion-type → emit-family priority ladder. Same ordering the
+# storefront uses for its visible badge precedence; see _pick_offer_promotion.
+_AB_PROMO_PRIORITY: tuple[tuple[str, str], ...] = (
+    ("Buy X Get Percentage Off All Products", FAMILY_BXG_PCT),
+    ("Grocery Buy X get Y free", FAMILY_BXGY_FREE),
+    ("Discount X Euros For Y Articles", FAMILY_DISCOUNT_EUROS),
+    ("Fixed Points For Threshold Promotion", FAMILY_FIXED_POINTS),
+    ("X Plus points for Y articles", FAMILY_PLUS_POINTS),
+)
 
 
 # --- OfferItem builders, one per emitted family --------------------------
@@ -246,11 +254,11 @@ def _build_sht_offer(
     sale_price = _parse_formatted_price(price_block.get("discountedPriceFormatted"))
     if sale_price is None:
         # Fall back to ``unitPrice`` if the formatted field is missing.
-        sale_price = _to_decimal(price_block.get("unitPrice"))
+        sale_price = to_decimal(price_block.get("unitPrice"))
         if sale_price is None:
             return None
 
-    original_price = _to_decimal(price_block.get("value"))
+    original_price = to_decimal(price_block.get("value"))
     # If somehow sale >= original, the "discount" is bogus; drop the
     # original-price claim rather than misrepresent it.
     if original_price is not None and original_price <= sale_price:
@@ -289,7 +297,7 @@ def _build_bxg_percent_offer(
     qualifying counts are noted in the promo title.
     """
     price_block = product.get("price") or {}
-    original_price = _to_decimal(price_block.get("value"))
+    original_price = to_decimal(price_block.get("value"))
     if original_price is None or promo is None:
         return None
 
@@ -327,7 +335,7 @@ def _build_bxgy_free_offer(
     if promo is None:
         return None
     price_block = product.get("price") or {}
-    original_price = _to_decimal(price_block.get("value"))
+    original_price = to_decimal(price_block.get("value"))
     if original_price is None or original_price <= 0:
         return None
 
@@ -365,7 +373,7 @@ def _build_discount_euros_offer(
     if promo is None:
         return None
     price_block = product.get("price") or {}
-    original_price = _to_decimal(price_block.get("value"))
+    original_price = to_decimal(price_block.get("value"))
     if original_price is None or original_price <= 0:
         return None
 
@@ -597,10 +605,3 @@ def _promo_date(raw: str | None) -> date | None:
         return None
 
 
-def _to_decimal(value: Any) -> Decimal | None:
-    if value is None:
-        return None
-    try:
-        return Decimal(str(value))
-    except (InvalidOperation, ValueError):
-        return None

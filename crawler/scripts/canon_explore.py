@@ -26,7 +26,7 @@ import unicodedata
 import urllib.parse
 import urllib.request
 from collections import defaultdict
-from typing import Iterable
+from collections.abc import Iterable
 
 API = "http://127.0.0.1:8001/api/public/v1"
 
@@ -45,8 +45,7 @@ def iter_offers(**filters) -> Iterable[dict]:
     page = 1
     while True:
         body = fetch("offers", per_page=100, page=page, **filters)
-        for row in body.get("data", []):
-            yield row
+        yield from body.get("data", [])
         meta = body.get("meta", {})
         if page >= (meta.get("last_page") or 1):
             return

@@ -43,13 +43,14 @@ from __future__ import annotations
 import html as htmllib
 import json
 import re
+from collections.abc import Iterable
 from datetime import date, datetime
-from decimal import Decimal, InvalidOperation
-from typing import Any, Iterable
+from typing import Any
 
 from loguru import logger
 
 from scraper.items import OfferItem
+from scraper.normalize import to_decimal
 
 # Every product card on a listing page wraps itself in an element carrying
 # ``data-grid-data="<HTML-entity-encoded JSON>"``. One attribute per product.
@@ -119,12 +120,12 @@ def _offer_from_grid_data(data: dict[str, Any], scraped_at: datetime) -> OfferIt
             break
     if price_block is None:
         return None
-    sale_price = _to_decimal(price_block.get("price"))
+    sale_price = to_decimal(price_block.get("price"))
     if sale_price is None:
         return None
 
     discount_block: dict[str, Any] = price_block.get("discount") or {}
-    original_price = _to_decimal(
+    original_price = to_decimal(
         price_block.get("oldPrice") or discount_block.get("deletedPrice")
     )
     discount_pct_raw = discount_block.get("percentageDiscount")
@@ -218,15 +219,6 @@ def _first_image(data: dict[str, Any]) -> str | None:
     if isinstance(flat, str):
         return flat
     return None
-
-
-def _to_decimal(value: Any) -> Decimal | None:
-    if value is None:
-        return None
-    try:
-        return Decimal(str(value))
-    except (InvalidOperation, ValueError):
-        return None
 
 
 def _to_int_in_range(value: Any, *, lo: int, hi: int) -> int | None:

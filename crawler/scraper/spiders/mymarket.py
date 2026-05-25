@@ -36,7 +36,7 @@ cap clips real coverage.
 from __future__ import annotations
 
 import os
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from typing import Any
 
 import scrapy
@@ -106,7 +106,7 @@ class MyMarketSpider(scrapy.Spider):
                         MYMARKET_MAX_PAGES,
                     )
 
-        scraped_at = datetime.now(timezone.utc)
+        scraped_at = datetime.now(UTC)
 
         count = 0
         for offer in extract_offers(response.text, scraped_at):

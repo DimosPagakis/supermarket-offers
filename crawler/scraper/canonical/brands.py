@@ -97,7 +97,6 @@ BRANDS: list[tuple[str, list[str]]] = [
     ("tasty",       ["tasty"]),
     ("ruffles",     ["ruffles"]),
     ("tuc",         ["tuc"]),
-    ("oreo",        ["oreo"]),
     ("ferrero",     ["ferrero"]),
     ("kinder",      ["kinder"]),
     ("nutella",     ["nutella"]),
@@ -129,12 +128,10 @@ BRANDS: list[tuple[str, list[str]]] = [
     ("rio-mare",    ["rio mare", "rio-mare"]),
     ("yotis",       ["yotis", "γιωτης"]),
     ("agno",        ["agno", "αγνο"]),
-    ("misko",       ["misko"]),
     ("kydonia",     ["kydonia", "κυδωνια"]),
 
     # --- Cereals / Breakfast ----------------------------------------------
     ("kellogg's",   ["kellogg's", "kelloggs"]),
-    ("nestle",      ["nestle"]),
     ("quaker",      ["quaker"]),
     ("dei",         ["dei", "δει"]),
 
@@ -247,17 +244,10 @@ BRANDS: list[tuple[str, list[str]]] = [
     ("korres",      ["korres"]),
     ("frezyderm",   ["frezyderm"]),
     ("loreal-paris", ["l'oreal paris", "loreal paris"]),
-    ("misko",       ["misko"]),
     ("ble",         ["ble"]),
     ("3a",          ["3α", "3a"]),
     ("home",        []),  # too generic — keep empty so no false matches
 ]
-
-
-# A small set of brand-canonical names that, when matched, must be the
-# *first* token of the product name (or be wrapped in word boundaries
-# at the start). Helps avoid e.g. "LACTACYD" being matched as "lacta".
-_LEADING_ONLY: set[str] = set()
 
 
 # Private-label/own-brand prefixes — explicitly NEVER canonicalise these
