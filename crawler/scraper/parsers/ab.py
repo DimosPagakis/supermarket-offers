@@ -57,14 +57,15 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Iterable
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 from typing import Any
-from collections.abc import Iterable
 
 from loguru import logger
 
 from scraper.items import OfferItem
+from scraper.normalize import to_decimal
 
 # Absolute URL prefix for product `url` and `images[].url` (both come back
 # as site-relative paths from the GraphQL API).
@@ -247,11 +248,11 @@ def _build_sht_offer(
     sale_price = _parse_formatted_price(price_block.get("discountedPriceFormatted"))
     if sale_price is None:
         # Fall back to ``unitPrice`` if the formatted field is missing.
-        sale_price = _to_decimal(price_block.get("unitPrice"))
+        sale_price = to_decimal(price_block.get("unitPrice"))
         if sale_price is None:
             return None
 
-    original_price = _to_decimal(price_block.get("value"))
+    original_price = to_decimal(price_block.get("value"))
     # If somehow sale >= original, the "discount" is bogus; drop the
     # original-price claim rather than misrepresent it.
     if original_price is not None and original_price <= sale_price:
@@ -290,7 +291,7 @@ def _build_bxg_percent_offer(
     qualifying counts are noted in the promo title.
     """
     price_block = product.get("price") or {}
-    original_price = _to_decimal(price_block.get("value"))
+    original_price = to_decimal(price_block.get("value"))
     if original_price is None or promo is None:
         return None
 
@@ -328,7 +329,7 @@ def _build_bxgy_free_offer(
     if promo is None:
         return None
     price_block = product.get("price") or {}
-    original_price = _to_decimal(price_block.get("value"))
+    original_price = to_decimal(price_block.get("value"))
     if original_price is None or original_price <= 0:
         return None
 
@@ -366,7 +367,7 @@ def _build_discount_euros_offer(
     if promo is None:
         return None
     price_block = product.get("price") or {}
-    original_price = _to_decimal(price_block.get("value"))
+    original_price = to_decimal(price_block.get("value"))
     if original_price is None or original_price <= 0:
         return None
 
@@ -598,10 +599,3 @@ def _promo_date(raw: str | None) -> date | None:
         return None
 
 
-def _to_decimal(value: Any) -> Decimal | None:
-    if value is None:
-        return None
-    try:
-        return Decimal(str(value))
-    except (InvalidOperation, ValueError):
-        return None

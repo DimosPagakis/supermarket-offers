@@ -37,15 +37,16 @@ from __future__ import annotations
 
 import html
 import json
+from collections.abc import Iterable
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
 from typing import Any
-from collections.abc import Iterable
 
 from loguru import logger
 from parsel import Selector
 
 from scraper.items import OfferItem
+from scraper.normalize import to_decimal
 
 SKLAVENITIS_BASE_URL = "https://www.sklavenitis.gr"
 
@@ -168,17 +169,9 @@ def _load_json_attr(card: Selector, attr: str) -> dict[str, Any] | None:
 
 def _coerce_price(value: Any) -> Decimal | None:
     """Turn a JSON number / numeric string into a Decimal with two places."""
-    if value is None:
-        return None
-    if isinstance(value, (int, float)):
-        # Decimal(float) drags FP imprecision in — round-trip through str.
-        try:
-            return Decimal(str(value))
-        except InvalidOperation:
-            return None
     if isinstance(value, str):
         return _parse_comma_decimal(value)
-    return None
+    return to_decimal(value)
 
 
 def _parse_comma_decimal(value: str | None) -> Decimal | None:

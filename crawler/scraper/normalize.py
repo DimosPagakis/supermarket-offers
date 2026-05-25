@@ -8,6 +8,7 @@ from __future__ import annotations
 import re
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
+from typing import Any
 
 # Matches a Greek-style price: "4,99 €", "4.99€", "€4,99", "1.234,56", etc.
 _PRICE_RE = re.compile(
@@ -174,3 +175,23 @@ def clean_text(raw: str | None) -> str | None:
         return None
     cleaned = re.sub(r"\s+", " ", raw).strip()
     return cleaned or None
+
+
+def to_decimal(value: Any) -> Decimal | None:
+    """Coerce a JSON-number / numeric-string into a Decimal.
+
+    Round-trips through ``str()`` so floats don't drag their binary
+    imprecision into the Decimal. Returns ``None`` for anything that
+    won't parse (including ``None`` itself).
+
+    Used across the per-brand parsers for fields the storefront already
+    serves as JSON numbers — see ``parse_price`` for the noisier
+    free-text variant that handles currency symbols and Greek thousands
+    separators.
+    """
+    if value is None:
+        return None
+    try:
+        return Decimal(str(value))
+    except (InvalidOperation, ValueError):
+        return None
