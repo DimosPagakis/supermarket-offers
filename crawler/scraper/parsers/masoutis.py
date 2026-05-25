@@ -79,6 +79,22 @@ def _offer_from_product(
     discount_raw = product.get("Discount")
     discount_pct = _parse_discount_pct(discount_raw)
 
+    # The ``GetPromoItemWithListCouponsSubCategoriesAutoPromos`` endpoint
+    # name promises "promo items" but the live response can include the
+    # full active catalogue alongside the weekly promos. Require at least
+    # one real promo signal per row:
+    #
+    # * ``Discount`` non-empty and starts with '-' (e.g. "-45%", "-€2"),
+    # * ``StartPrice`` > ``PosPrice`` (a true strikethrough — captured as
+    #   ``original_price`` above; non-None implies the inequality),
+    # * ``OfferDescr`` non-null / non-empty (Masoutis's free-text promo
+    #   blurb, populated only on flyer rows).
+    #
+    # Cards with none of these are catalogue leaks and must not surface
+    # on the public ``/offers`` endpoint.
+    if not _has_promo_signal(product, original_price):
+        return None
+
     # Masoutis only ships single-unit strikethrough deals (no multi-buy
     # metadata). Surface the brand's own ``Discount`` string verbatim
     # as the badge label ("-45%") and tag the row as `strikethrough` —
@@ -148,6 +164,31 @@ def _offer_from_product(
         valid_to=None,
         scraped_at=scraped_at,
     )
+
+
+def _has_promo_signal(product: dict[str, Any], original_price: Any) -> bool:
+    """Return True iff ``product`` looks like a genuine promo (not catalogue leak).
+
+    A real Masoutis promo row carries at least one of:
+
+    * ``Discount`` non-empty and starts with '-' / '−' (e.g. "-45%"),
+    * ``StartPrice`` strictly above ``PosPrice`` — manifests as a
+      non-None ``original_price`` in the caller,
+    * ``OfferDescr`` non-null and non-blank.
+
+    Returns False for catalogue-leak rows so the parser can skip them.
+    """
+    if original_price is not None:
+        return True
+    discount = product.get("Discount")
+    if isinstance(discount, str):
+        stripped = discount.strip()
+        if stripped.startswith(("-", "−")) and any(ch.isdigit() for ch in stripped):
+            return True
+    offer_descr = product.get("OfferDescr")
+    if isinstance(offer_descr, str) and offer_descr.strip():
+        return True
+    return False
 
 
 def _parse_discount_pct(raw: Any) -> int | None:

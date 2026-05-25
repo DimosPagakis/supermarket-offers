@@ -25,38 +25,48 @@ def _load_offers() -> list[OfferItem]:
     return load_offers("my-market", "listing-page1.html")
 
 
-def test_extracts_one_offer_per_card() -> None:
-    """The page has 35 ``.product--teaser`` cards. Parser must emit one
-    OfferItem per card with a parseable price."""
+def test_extracts_only_discounted_offers() -> None:
+    """The page has 35 ``.product--teaser`` cards but ``/offers`` is the
+    entire chain catalogue, not a real flyer. The parser gates emit on
+    a ``diagonal-line`` strikethrough or an explicit ``offer-note--percent``
+    pill — cards carrying only the "SUPER ΤΙΜΗ" everyday-low-price
+    sticker are skipped silently. Net expected: 7 real discounted
+    offers (5 ΠΡΟΣΦΟΡΑ + 2 -N%)."""
     offers = _load_offers()
-    assert len(offers) == 35, f"expected 35 offers, got {len(offers)}"
+    assert len(offers) == 7, f"expected 7 discounted offers, got {len(offers)}"
+    # Every emitted offer must carry a real promo signal — that is the
+    # whole point of the gate.
+    for o in offers:
+        assert o.promo_label is not None
+        assert o.promo_type == "strikethrough"
 
 
-def test_first_offer_field_mapping() -> None:
-    """End-to-end map of the first card (Greek carrots, €0.72)."""
-    offer = _load_offers()[0]
-
-    assert offer.name == "Καρότα Ελληνικά Τιμή Κιλού"
-    assert offer.external_id == "192321"  # from analytics JSON; data-id is 11625
-    assert offer.price == Decimal("0.72")
-
-    # The page doesn't expose original price / discount % on the listing
-    # view — we explicitly emit nulls rather than guess.
-    assert offer.original_price is None
-    assert offer.discount_pct is None
-
+def test_percent_pill_card_maps_discount_pct_and_label() -> None:
+    """A card with a "-25%" pill must surface ``discount_pct=25`` and a
+    "−25%" promo label so the FE renders the brand-supplied discount
+    figure verbatim."""
+    offer = next(o for o in _load_offers() if o.external_id == "118918")
+    assert offer.name.startswith("Ροδόπη Γιαούρτι")
+    assert offer.price == Decimal("1.04")
+    assert offer.discount_pct == 25
+    assert offer.promo_label == "−25%"
+    assert offer.promo_type == "strikethrough"
     # Currency is hardcoded EUR (the page is Greek-market-only).
     assert offer.currency == "EUR"
 
-    # Category comes from the analytics blob's deepest level.
-    assert offer.category is not None and "Καρότα" in offer.category
 
-    # URL is the absolute product page.
-    assert offer.url == "https://www.mymarket.gr/karota-ellinika-timi-kilou"
-
-    # Image absolute URL.
-    assert offer.image_url is not None
-    assert offer.image_url.startswith("https://cdn.mymarket.gr/images/")
+def test_prosfora_only_card_emits_generic_label() -> None:
+    """A card with a ``diagonal-line`` strikethrough but no "-N%" pill
+    (Discount text lives only on the comparator price) still emits with
+    a ``ΠΡΟΣΦΟΡΑ`` promo label — required by the backend's defensive
+    promo-signal validator and rendered on the FE as the brand-supplied
+    badge."""
+    offer = next(o for o in _load_offers() if o.external_id == "134061")
+    assert offer.name.startswith("Χοιρινός Λαιμός")
+    assert offer.price == Decimal("5.29")
+    assert offer.discount_pct is None
+    assert offer.promo_label == "ΠΡΟΣΦΟΡΑ"
+    assert offer.promo_type == "strikethrough"
 
 
 def test_offers_dedupe_within_page() -> None:
@@ -69,11 +79,13 @@ def test_offers_dedupe_within_page() -> None:
 
 
 def test_payload_round_trip_matches_backend_contract() -> None:
-    offer = _load_offers()[0]
+    offer = next(o for o in _load_offers() if o.external_id == "118918")
     payload = assert_payload_matches_backend_contract(offer)
-    assert payload["price"] == 0.72
+    assert payload["price"] == 1.04
     assert payload["original_price"] is None
-    assert payload["discount_pct"] is None
+    assert payload["discount_pct"] == 25
+    assert payload["promo_label"] == "−25%"
+    assert payload["promo_type"] == "strikethrough"
 
 
 def test_extract_total_pages_from_listing() -> None:

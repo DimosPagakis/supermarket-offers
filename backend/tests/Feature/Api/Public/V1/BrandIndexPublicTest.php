@@ -12,7 +12,10 @@ class BrandIndexPublicTest extends PublicApiTestCase
 
         $response = $this->getJson('/api/public/v1/brands')->assertOk();
 
-        $response->assertJsonCount(5, 'data');
+        // 4 of 5 seeded brands are active. Sklavenitis is seeded inactive
+        // (2026-05-25) — its only entry point ships the chain catalogue
+        // not a flyer. See BrandSeeder.
+        $response->assertJsonCount(4, 'data');
     }
 
     public function test_only_active_brands_are_returned(): void
@@ -22,9 +25,11 @@ class BrandIndexPublicTest extends PublicApiTestCase
 
         $response = $this->getJson('/api/public/v1/brands')->assertOk();
 
-        $response->assertJsonCount(4, 'data');
+        // 5 seeded - 1 inactive (sklavenitis) - 1 we just flipped (lidl) = 3.
+        $response->assertJsonCount(3, 'data');
         $slugs = array_column($response->json('data'), 'slug');
         $this->assertNotContains('lidl', $slugs);
+        $this->assertNotContains('sklavenitis', $slugs);
     }
 
     public function test_response_omits_internal_crawl_config(): void

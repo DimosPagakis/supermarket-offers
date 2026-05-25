@@ -17,15 +17,30 @@ field, but it's the per-display-unit price (€/g for "Τιμή Κιλού"
 products) and would mislead a shopper. We read the displayed price
 out of the DOM spans instead — that's what the customer sees.
 
-My Market doesn't expose an explicit "original price" / "discount %"
-on the listing page (those live behind a click-through). We emit the
-displayed price as ``price`` and leave ``original_price`` /
-``discount_pct`` empty rather than guess.
+Discounted-only emit policy (2026-05-25)
+----------------------------------------
+``/offers`` is misnamed — it ships the chain's full active catalogue
+plus a handful of items decorated with promotional UI. Of 35 cards
+on a typical page, only ~20% carry a real discount signal. To stop
+the catalogue leaking onto the public ``/offers`` API, the parser
+gates emission on one of:
+
+* a ``span.diagonal-line`` element — strikethrough original price
+  (typically the per-kg / per-unit prior figure inside the price
+  analysis block); present on every real "ΠΡΟΣΦΟΡΑ" / "-N%" card,
+* a ``.offer-note--percent`` element — the explicit "-N%" pill.
+
+Cards with neither signal are catalogue tiles ("SUPER ΤΙΜΗ" is a
+low-everyday-price sticker, **not** a real promo) and are skipped
+silently. When a card carries a strikethrough we additionally parse
+the original price and synthesise a ``discount_pct`` / ``promo_label``
+/ ``promo_type='strikethrough'`` so the frontend pill renders.
 """
 
 from __future__ import annotations
 
 import json
+import re
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
 from typing import Any
@@ -37,6 +52,10 @@ from parsel import Selector
 from scraper.items import OfferItem
 
 MYMARKET_BASE_URL = "https://www.mymarket.gr"
+
+# Match "-25%" / "−25%" inside the offer-note--percent pill. Accept both
+# ASCII minus and the unicode "−" (U+2212).
+_PERCENT_RE = re.compile(r"[-−]?\s*(\d{1,3})\s*%")
 
 
 def extract_total_pages(html_text: str) -> int | None:
@@ -100,6 +119,38 @@ def _offer_from_card(card: Selector, scraped_at: datetime) -> OfferItem | None:
     if price is None:
         return None
 
+    # Discounted-only emit gate (see module docstring). Keep the card
+    # only if it carries a real promo signal — a strikethrough
+    # ``diagonal-line`` original price somewhere in the card, or the
+    # explicit ``-N%`` pill in ``offer-note--percent``. Cards carrying
+    # only the "SUPER ΤΙΜΗ" sticker are everyday-low-price catalogue
+    # tiles, not real promos, and must be skipped.
+    has_diagonal = bool(card.xpath('.//*[contains(@class, "diagonal-line")]').get())
+    percent_text = card.css(".offer-note--percent::text").get()
+    discount_pct = _parse_discount_pct(percent_text)
+    if not has_diagonal and discount_pct is None:
+        return None
+
+    # Optional: synthesise the FE pill when we have a numeric %. We
+    # deliberately do not populate ``original_price`` from the
+    # diagonal-line value — that figure is the per-kg / per-unit
+    # comparator price, not the headline strikethrough on ``price``.
+    promo_label: str | None = None
+    promo_type: str | None = None
+    if discount_pct is not None and discount_pct > 0:
+        promo_label = f"−{discount_pct}%"
+        promo_type = "strikethrough"
+    elif has_diagonal:
+        # Strikethrough present but no explicit % pill. Surface the
+        # brand's own copy ("ΠΡΟΣΦΟΡΑ") when present, else fall back
+        # to a generic label so the FE pill renders and the row
+        # carries a non-null ``promo_label`` (the backend's defensive
+        # promo-signal validator requires at least one of
+        # original_price/discount_pct/promo_label).
+        msg = (card.css(".offer-note--message::text").get() or "").strip()
+        promo_label = msg if msg and "ΠΡΟΣΦΟΡΑ" in msg else "ΠΡΟΣΦΟΡΑ"
+        promo_type = "strikethrough"
+
     # Pull the analytics JSON blob — best source for SKU + category, since
     # those aren't reliably exposed in surface DOM.
     analytics_raw = card.css("h3 a::attr(data-google-analytics-item-param)").get()
@@ -158,12 +209,34 @@ def _offer_from_card(card: Selector, scraped_at: datetime) -> OfferItem | None:
         unit=None,
         price=price,
         original_price=None,
-        discount_pct=None,
+        discount_pct=discount_pct,
+        promo_label=promo_label,
+        promo_type=promo_type,
         currency="EUR",
         valid_from=None,
         valid_to=None,
         scraped_at=scraped_at,
     )
+
+
+def _parse_discount_pct(raw: str | None) -> int | None:
+    """Pull the integer percent out of an ``offer-note--percent`` pill text.
+
+    Pills observed in the wild: "-25%", "−30%". Returns None when the
+    pill is absent or the text doesn't carry a plausible 0..100 integer.
+    """
+    if not raw:
+        return None
+    match = _PERCENT_RE.search(raw)
+    if not match:
+        return None
+    try:
+        pct = int(match.group(1))
+    except ValueError:
+        return None
+    if 0 <= pct <= 100:
+        return pct
+    return None
 
 
 def _compose_price(whole: str, fraction: str) -> Decimal | None:

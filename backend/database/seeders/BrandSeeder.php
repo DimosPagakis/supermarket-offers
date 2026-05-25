@@ -34,7 +34,16 @@ class BrandSeeder extends Seeder
                 // HTTP (no Playwright); the trick is at the TLS layer.
                 'start_url' => 'https://www.sklavenitis.gr/sylloges/prosfores/',
                 'strategy' => 'http_api',
-                'active' => true,
+                // Seeded inactive (2026-05-25). The `/sylloges/prosfores`
+                // URL is misnamed — it ships the chain's full catalogue,
+                // not a weekly flyer. The only observable per-card promo
+                // signal in the markup is the ``.sign-badges`` "N+M Δώρο"
+                // badge, present on ~1 in 24 cards. We refuse to seed the
+                // catalogue under the guise of "offers"; the brand will
+                // stay inactive until a real flyer entry point is found
+                // (or Sklavenitis adds strikethrough markup to the
+                // listing). Flip back to `true` once that lands.
+                'active' => false,
             ],
             [
                 'name' => 'Lidl Hellas',

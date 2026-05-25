@@ -140,3 +140,50 @@ def test_parser_short_page_signals_end_of_catalogue() -> None:
     short_page = [_product_stub(i) for i in range(37)]
     offers = list(extract_offers_from_payload(short_page, SCRAPED_AT))
     assert len(offers) == 37
+
+
+def test_parser_skips_catalogue_leak_rows() -> None:
+    """The ``GetPromoItemWithListCouponsSubCategoriesAutoPromos`` endpoint
+    sometimes includes regular catalogue rows (no Discount string, no
+    StartPrice > PosPrice, no OfferDescr). They must be filtered out
+    silently — only rows that carry a real promo signal reach the DB.
+    """
+    catalogue_row = {
+        "Itemcode": 9999,
+        "ItemDescr": "Plain Catalogue Item",
+        "ItemDescrLink": "https://www.masoutis.gr/categories/item/x",
+        "PhotoData": "https://example.com/img.jpg",
+        "PosPrice": "2.00",
+        "StartPrice": "2.00",  # equal — no strikethrough
+        "Discount": "",        # empty string
+        "OfferDescr": None,    # null
+        "BrandNameDesciption": "Brand",
+        "ItemVolume": "1τμχ",
+    }
+    promo_row = _product_stub(123)  # has "-39%" Discount
+    offers = list(
+        extract_offers_from_payload([catalogue_row, promo_row], SCRAPED_AT)
+    )
+    assert len(offers) == 1
+    assert offers[0].external_id == "123"
+
+
+def test_parser_keeps_offerdescr_only_rows() -> None:
+    """A row with no Discount string and no strikethrough is still a real
+    promo if Masoutis populated ``OfferDescr`` — that's the flyer-only
+    metadata column. The parser should emit it."""
+    row = {
+        "Itemcode": 777,
+        "ItemDescr": "OfferDescr-only promo",
+        "ItemDescrLink": "https://www.masoutis.gr/categories/item/y",
+        "PhotoData": "https://example.com/img.jpg",
+        "PosPrice": "1.50",
+        "StartPrice": "1.50",
+        "Discount": None,
+        "OfferDescr": "1+1 ΔΩΡΟ",
+        "BrandNameDesciption": "Brand",
+        "ItemVolume": "1τμχ",
+    }
+    offers = list(extract_offers_from_payload([row], SCRAPED_AT))
+    assert len(offers) == 1
+    assert offers[0].external_id == "777"
