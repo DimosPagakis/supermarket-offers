@@ -173,9 +173,12 @@ export function OffersFiltersBar({ brands, categories, lockedBrand }: Props) {
           </select>
         </label>
 
-        {/* Min-discount pill stepper */}
+        {/* Min-discount pill stepper. Pill labels carry the ≥ symbol so
+            "≥30%" reads unambiguously as "30 or more", not "exactly 30".
+            User feedback was that bare "30%" looked like an equality and
+            users were surprised to see 50%-off items on the page. */}
         <fieldset className="flex items-center gap-2 text-xs font-semibold text-ink-soft">
-          <legend className="contents">Έκπτωση ≥</legend>
+          <legend className="contents">Έκπτωση τουλάχιστον</legend>
           {DISCOUNT_STEPS.map((n) => {
             const active = minDiscount === n;
             return (
@@ -184,13 +187,18 @@ export function OffersFiltersBar({ brands, categories, lockedBrand }: Props) {
                 type="button"
                 onClick={() => onChangeMinDiscount(n)}
                 aria-pressed={active}
-                className={`min-w-[2.75rem] rounded-full px-2 py-1 text-xs font-semibold transition-shadow focus:outline-none focus-visible:ring-2 focus-visible:ring-brand ${
+                title={
+                  n === 0
+                    ? "Χωρίς ελάχιστη έκπτωση"
+                    : `Δείξε μόνο προσφορές με έκπτωση τουλάχιστον ${n}%`
+                }
+                className={`min-w-[3.25rem] rounded-full px-2 py-1 text-xs font-semibold transition-shadow focus:outline-none focus-visible:ring-2 focus-visible:ring-brand ${
                   active
                     ? "shadow-inset text-brand"
                     : "shadow-raised-sm text-ink-soft hover:shadow-raised"
                 }`}
               >
-                {n === 0 ? "καμία" : `${n}%`}
+                {n === 0 ? "καμία" : `≥ ${n}%`}
               </button>
             );
           })}
