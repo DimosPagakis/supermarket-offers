@@ -86,7 +86,7 @@ export function PriceHistoryChart({ history, currency = "EUR" }: Props) {
           strokeWidth={2}
         />
         {points.map((p) => (
-          <circle key={p.point.date} cx={p.x} cy={p.y} r={3} fill="#5AA9E6" />
+          <circle key={p.point.id} cx={p.x} cy={p.y} r={3} fill="#5AA9E6" />
         ))}
         {points.length > 0 && (
           <>
@@ -96,7 +96,7 @@ export function PriceHistoryChart({ history, currency = "EUR" }: Props) {
               textAnchor="start"
               className="fill-ink-muted text-[10px]"
             >
-              {points[0].point.date}
+              {points[0].point.scraped_at.slice(0, 10)}
             </text>
             <text
               x={points[points.length - 1].x}
@@ -104,7 +104,7 @@ export function PriceHistoryChart({ history, currency = "EUR" }: Props) {
               textAnchor="end"
               className="fill-ink-muted text-[10px]"
             >
-              {points[points.length - 1].point.date}
+              {points[points.length - 1].point.scraped_at.slice(0, 10)}
             </text>
           </>
         )}

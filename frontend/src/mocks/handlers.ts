@@ -100,7 +100,9 @@ export const mockApi = {
     const found = mockOffers.find((o) => o.id === id);
     if (!found) return Promise.reject(new Error(`offer ${id} not found`));
     if (!includeHistory) return Promise.resolve(found);
-    // Build a tiny synthetic history.
+    // Build a tiny synthetic history. Shape mirrors the real
+    // `/api/public/v1/offers/{id}?include_history=true` response so
+    // callers see the same fields whether mocks are on or off.
     const history = Array.from({ length: 8 }).map((_, i) => {
       const d = new Date(found.scraped_at);
       d.setDate(d.getDate() - (7 - i));
@@ -108,13 +110,17 @@ export const mockApi = {
       const price = Math.round(found.price * drift * 100) / 100;
       const original = found.original_price;
       return {
-        date: d.toISOString().slice(0, 10),
+        id: found.id * 1000 + i,
         price,
         original_price: original,
         discount_pct:
           original && original > price
             ? Math.round(((original - price) / original) * 100)
             : null,
+        promo_label: found.promo_label ?? null,
+        promo_type: found.promo_type ?? null,
+        currency: found.currency,
+        scraped_at: d.toISOString(),
       };
     });
     return Promise.resolve({ ...found, history });

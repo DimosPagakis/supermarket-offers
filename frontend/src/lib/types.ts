@@ -65,10 +65,17 @@ export type Offer = {
 };
 
 export type PriceHistoryPoint = {
-  date: string;
+  /** The offer-row id that captured this snapshot. Use to redirect
+   *  stale `/offers/{id}` URLs to the latest snapshot for the same
+   *  product. */
+  id: number;
   price: number;
   original_price: number | null;
   discount_pct: number | null;
+  promo_label?: string | null;
+  promo_type?: PromoType | null;
+  currency: string;
+  scraped_at: string;
 };
 
 export type OfferWithHistory = Offer & {

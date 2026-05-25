@@ -1,11 +1,39 @@
 import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { BrandChip } from "@/components/BrandChip";
 import { PriceHistoryChart } from "@/components/PriceHistoryChart";
 import { fetchOffer } from "@/lib/api";
 import { formatDate, formatPrice, formatValidity } from "@/lib/format";
+
+/**
+ * Find the most-recent offer id for this product, if it differs from the
+ * one in the URL. The crawler inserts a fresh offer row per run; old rows
+ * persist for price-history. A bookmarked / search-engine-cached URL like
+ * `/offers/7787` can therefore land on a stale snapshot whose pricing or
+ * promo-label predates a later parser fix. Listing pages already use
+ * latest-per-product so they don't suffer this. We redirect the detail
+ * page to the latest snapshot when one exists.
+ */
+function latestSnapshotIdIfDifferent(
+  currentId: number,
+  history: Array<{ id: number; scraped_at: string }> | undefined,
+): number | null {
+  if (!history || history.length === 0) return null;
+  // API returns history ordered by scraped_at desc. Trust that, but be
+  // defensive: take the actual max id we see (id is monotonic per crawl).
+  let latest = history[0];
+  for (const h of history) {
+    if (
+      h.scraped_at > latest.scraped_at ||
+      (h.scraped_at === latest.scraped_at && h.id > latest.id)
+    ) {
+      latest = h;
+    }
+  }
+  return latest.id !== currentId ? latest.id : null;
+}
 
 async function loadOffer(idRaw: string) {
   const id = Number(idRaw);
@@ -43,7 +71,20 @@ export default async function OfferDetailPage({
   const offer = await loadOffer(id);
   if (!offer) notFound();
 
-  const { product, brand, price, original_price, discount_pct, currency, valid_from, valid_to, history } = offer;
+  // Stale-snapshot guard. If a newer offer row exists for the same
+  // product (crawler ran since this row was created), forward to it so
+  // the URL is effectively canonical-per-product. SEO-friendly 308.
+  const newerId = latestSnapshotIdIfDifferent(offer.id, offer.history);
+  if (newerId) {
+    redirect(`/offers/${newerId}`);
+  }
+
+  const { product, brand, price, original_price, discount_pct, promo_label, currency, valid_from, valid_to, history } = offer;
+  const promoBadge: string | null = promo_label
+    ? promo_label
+    : discount_pct != null && discount_pct > 0
+      ? `-${discount_pct}%`
+      : null;
   const savings =
     original_price != null && original_price > price ? original_price - price : null;
 
@@ -74,9 +115,9 @@ export default async function OfferDetailPage({
               <span aria-hidden>🛒</span>
             </div>
           )}
-          {discount_pct != null && discount_pct > 0 && (
+          {promoBadge && (
             <span className="absolute left-3 top-3 rounded-full bg-accent px-3 py-1 text-sm font-bold uppercase tracking-wide text-white shadow-sm">
-              -{discount_pct}%
+              {promoBadge}
             </span>
           )}
         </div>
