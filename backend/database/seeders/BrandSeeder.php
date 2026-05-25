@@ -32,9 +32,12 @@ class BrandSeeder extends Seeder
                 'name' => 'Lidl Hellas',
                 'slug' => 'lidl',
                 'website_url' => 'https://www.lidl-hellas.gr',
-                // Stable flyer landing page. Spider parses current-week flyer link from here,
-                // then follows. Avoids weekly seed updates (week-specific slugs change Thursdays).
-                'start_url' => 'https://www.lidl-hellas.gr/c/fylladio-lidl/s10020481',
+                // Homepage is the most stable URL on the site. The spider walks
+                // every "/c/<theme>-<YY>kw<WW>/a<id>" campaign anchor it finds
+                // (weekly-selections + themed promos) and parses the JSON
+                // payload that every campaign page embeds in `data-grid-data`
+                // attributes. No flyer / PDF viewer involvement.
+                'start_url' => 'https://www.lidl-hellas.gr/',
                 'strategy' => 'scrapy',
             ],
             [
