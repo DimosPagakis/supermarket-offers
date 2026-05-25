@@ -4,7 +4,13 @@
  * so filters are shareable, bookmarkable, and SSR-friendly.
  */
 
-import type { OfferQuery, SortDir, SortField } from "./types";
+import type {
+  CanonicalQuery,
+  CanonicalSortField,
+  OfferQuery,
+  SortDir,
+  SortField,
+} from "./types";
 
 type Raw = Record<string, string | string[] | undefined>;
 
@@ -75,6 +81,66 @@ export function toSearchString(q: OfferQuery): string {
   if (typeof q.has_discount === "boolean") sp.set("has_discount", String(q.has_discount));
   if (q.valid_on) sp.set("valid_on", q.valid_on);
   if (q.q) sp.set("q", q.q);
+  if (q.sort) sp.set("sort", q.sort);
+  if (q.dir) sp.set("dir", q.dir);
+  if (q.page && q.page > 1) sp.set("page", String(q.page));
+  if (q.per_page) sp.set("per_page", String(q.per_page));
+  return sp.toString();
+}
+
+// ---------------------------------------------------------------------------
+// Canonical product query
+// ---------------------------------------------------------------------------
+
+export function parseCanonicalQuery(params: Raw): CanonicalQuery {
+  const out: CanonicalQuery = {};
+
+  const q = firstString(params.q);
+  if (q) out.q = q;
+
+  const brand = csv(params.brand);
+  if (brand) out.brand = brand;
+
+  const category = firstString(params.category);
+  if (category) out.category = category;
+
+  const minBrands = firstString(params.min_brands);
+  if (minBrands != null && minBrands !== "") {
+    const n = Number(minBrands);
+    if (Number.isFinite(n) && n >= 1 && n <= 10) out.min_brands = Math.floor(n);
+  }
+
+  const sort = firstString(params.sort);
+  if (
+    sort === "brands_count" ||
+    sort === "members_count" ||
+    sort === "display_name"
+  ) {
+    out.sort = sort as CanonicalSortField;
+  }
+  const dir = firstString(params.dir);
+  if (dir === "asc" || dir === "desc") out.dir = dir as SortDir;
+
+  const page = firstString(params.page);
+  if (page) {
+    const n = Number(page);
+    if (Number.isFinite(n) && n > 0) out.page = Math.floor(n);
+  }
+  const perPage = firstString(params.per_page);
+  if (perPage) {
+    const n = Number(perPage);
+    if (Number.isFinite(n) && n > 0) out.per_page = Math.min(Math.floor(n), 100);
+  }
+  return out;
+}
+
+export function toCanonicalSearchString(q: CanonicalQuery): string {
+  const sp = new URLSearchParams();
+  if (q.q) sp.set("q", q.q);
+  if (q.brand?.length) sp.set("brand", q.brand.join(","));
+  if (q.category) sp.set("category", q.category);
+  if (typeof q.min_brands === "number")
+    sp.set("min_brands", String(q.min_brands));
   if (q.sort) sp.set("sort", q.sort);
   if (q.dir) sp.set("dir", q.dir);
   if (q.page && q.page > 1) sp.set("page", String(q.page));

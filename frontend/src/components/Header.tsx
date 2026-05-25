@@ -22,6 +22,12 @@ export function Header() {
               Όλες οι προσφορές
             </Link>
             <Link
+              href="/compare"
+              className="rounded-md py-1 transition-colors hover:text-brand"
+            >
+              Σύγκριση
+            </Link>
+            <Link
               href="/about"
               className="rounded-md py-1 transition-colors hover:text-brand"
             >

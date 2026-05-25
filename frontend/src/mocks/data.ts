@@ -1,4 +1,10 @@
-import type { Brand, Offer } from "@/lib/types";
+import type {
+  Brand,
+  CanonicalOffer,
+  CanonicalProductDetail,
+  CanonicalProductSummary,
+  Offer,
+} from "@/lib/types";
 
 export const mockBrands: Brand[] = [
   {
@@ -81,6 +87,242 @@ const productSeeds: ProductSeed[] = [
   { name: "Ζυμαρικά Misko 500g", category: "Φρέσκα", unit: "500g", price: 1.29, original: 1.79 },
   { name: "Καφές Loumidis 500g", category: "Φρέσκα", unit: "500g", price: 5.99, original: 7.49 },
 ];
+
+// ---------------------------------------------------------------------------
+// Canonical product comparison
+// ---------------------------------------------------------------------------
+
+type CanonicalSeed = {
+  id: number;
+  manufacturer_brand: string;
+  display_name: string;
+  size_value: number | null;
+  size_unit: string | null;
+  pack_count: number;
+  variant_descriptor: string | null;
+  category: string | null;
+  image_url: string | null;
+  // brand_slug → { product_name, price, original_price?, url? }
+  members: Array<{
+    brand_slug: string;
+    product_name: string;
+    product_url: string | null;
+    price: number;
+    original_price?: number;
+    valid_to?: string;
+  }>;
+};
+
+const canonicalSeeds: CanonicalSeed[] = [
+  {
+    id: 101,
+    manufacturer_brand: "Coca-Cola",
+    display_name: "Coca-Cola Original Taste 1.5L",
+    size_value: 1.5,
+    size_unit: "l",
+    pack_count: 1,
+    variant_descriptor: "Original Taste",
+    category: "Ποτά",
+    image_url: null,
+    members: [
+      {
+        brand_slug: "ab",
+        product_name: "Coca-Cola Original Taste 1,5lt",
+        product_url: "https://www.ab.gr/p/coca-cola-1-5l",
+        price: 1.55,
+        original_price: 2.29,
+        valid_to: "2026-06-03",
+      },
+      {
+        brand_slug: "sklavenitis",
+        product_name: "COCA-COLA Original Taste 1,5lt",
+        product_url: "https://www.sklavenitis.gr/p/coca-cola-1-5l",
+        price: 1.69,
+        original_price: 2.29,
+        valid_to: "2026-06-03",
+      },
+      {
+        brand_slug: "mymarket",
+        product_name: "Coca-Cola 1,5lt",
+        product_url: "https://www.mymarket.gr/p/coca-cola-1-5l",
+        price: 1.79,
+        valid_to: "2026-06-07",
+      },
+      {
+        brand_slug: "masoutis",
+        product_name: "Coca Cola 1,5lt.",
+        product_url: "https://www.masoutis.gr/p/coca-cola-1-5l",
+        price: 1.75,
+        original_price: 2.29,
+        valid_to: "2026-06-03",
+      },
+      {
+        brand_slug: "lidl",
+        product_name: "Coca-Cola Original 1,5L",
+        product_url: "https://www.lidl-hellas.gr/p/coca-cola-1-5l",
+        price: 1.59,
+        valid_to: "2026-06-10",
+      },
+    ],
+  },
+  {
+    id: 102,
+    manufacturer_brand: "Lacta",
+    display_name: "Lacta Γκοφρέτα Φουντούκι 31g",
+    size_value: 31,
+    size_unit: "g",
+    pack_count: 1,
+    variant_descriptor: "Φουντούκι",
+    category: "Σνακ",
+    image_url: null,
+    members: [
+      {
+        brand_slug: "ab",
+        product_name: "Lacta Γκοφρέτα Φουντούκι 31g",
+        product_url: "https://www.ab.gr/p/lacta-foundouki-31g",
+        price: 0.69,
+        original_price: 0.85,
+        valid_to: "2026-06-03",
+      },
+      {
+        brand_slug: "mymarket",
+        product_name: "Lacta Wafer Φουντούκι 31gr",
+        product_url: "https://www.mymarket.gr/p/lacta-foundouki-31g",
+        price: 0.75,
+        valid_to: "2026-06-05",
+      },
+      {
+        brand_slug: "sklavenitis",
+        product_name: "LACTA Γκοφρέτα Φουντούκι 31g",
+        product_url: "https://www.sklavenitis.gr/p/lacta-foundouki-31g",
+        price: 0.79,
+        original_price: 0.85,
+        valid_to: "2026-06-03",
+      },
+    ],
+  },
+  {
+    id: 103,
+    manufacturer_brand: "Melissa",
+    display_name: "Melissa Σπαγγέτι Χωρίς Γλουτένη 400g",
+    size_value: 400,
+    size_unit: "g",
+    pack_count: 1,
+    variant_descriptor: "Χωρίς Γλουτένη",
+    category: "Ζυμαρικά",
+    image_url: null,
+    members: [
+      {
+        brand_slug: "sklavenitis",
+        product_name: "MELISSA Σπαγγέτι Χωρίς γλουτένη 400g",
+        product_url: "https://www.sklavenitis.gr/p/melissa-gf-400g",
+        price: 2.13,
+        valid_to: "2026-06-10",
+      },
+      {
+        brand_slug: "mymarket",
+        product_name: "Melissa Σπαγγέτι Χωρίς Γλουτένη 400gr",
+        product_url: "https://www.mymarket.gr/p/melissa-gf-400g",
+        price: 2.29,
+        valid_to: "2026-06-15",
+      },
+    ],
+  },
+];
+
+function brandBySlug(slug: string): Brand {
+  const b = mockBrands.find((br) => br.slug === slug);
+  if (!b) {
+    throw new Error(`mock brand not found for slug ${slug}`);
+  }
+  return b;
+}
+
+function buildCanonicalOffers(seed: CanonicalSeed): CanonicalOffer[] {
+  let nextOfferId = seed.id * 1000;
+  let nextProductId = seed.id * 100;
+  return seed.members.map((m) => {
+    const brand = brandBySlug(m.brand_slug);
+    const original = m.original_price ?? null;
+    const discount_pct =
+      original && original > m.price
+        ? Math.round(((original - m.price) / original) * 100)
+        : null;
+    return {
+      brand,
+      product: {
+        id: nextProductId++,
+        name: m.product_name,
+        url: m.product_url,
+        image_url: null,
+      },
+      offer: {
+        id: nextOfferId++,
+        price: m.price,
+        original_price: original,
+        discount_pct,
+        valid_from: "2026-05-25",
+        valid_to: m.valid_to ?? null,
+        scraped_at: "2026-05-25T08:00:00Z",
+      },
+    };
+  });
+}
+
+function summarise(seed: CanonicalSeed): CanonicalProductSummary {
+  const offers = buildCanonicalOffers(seed);
+  const prices = offers.map((o) => o.offer.price);
+  const min_price = Math.min(...prices);
+  const max_price = Math.max(...prices);
+  const avg_price =
+    Math.round((prices.reduce((a, b) => a + b, 0) / prices.length) * 100) / 100;
+  const cheapest = offers.reduce((a, b) =>
+    a.offer.price <= b.offer.price ? a : b,
+  );
+  const brands_count = new Set(offers.map((o) => o.brand.slug)).size;
+  return {
+    id: seed.id,
+    canonical_key: `${seed.manufacturer_brand.toLowerCase()}-${seed.id}`,
+    manufacturer_brand: seed.manufacturer_brand,
+    size_value: seed.size_value,
+    size_unit: seed.size_unit,
+    pack_count: seed.pack_count,
+    variant_descriptor: seed.variant_descriptor,
+    display_name: seed.display_name,
+    category: seed.category,
+    image_url: seed.image_url,
+    members_count: offers.length,
+    brands_count,
+    min_price,
+    max_price,
+    avg_price,
+    cheapest_brand: {
+      id: cheapest.brand.id,
+      name: cheapest.brand.name,
+      slug: cheapest.brand.slug,
+    },
+  };
+}
+
+export const mockCanonicalProducts: CanonicalProductSummary[] =
+  canonicalSeeds.map(summarise);
+
+export const mockCanonicalDetails: Record<number, CanonicalProductDetail> =
+  Object.fromEntries(
+    canonicalSeeds.map((seed) => {
+      const summary = summarise(seed);
+      const offers = buildCanonicalOffers(seed).sort(
+        (a, b) => a.offer.price - b.offer.price,
+      );
+      const detail: CanonicalProductDetail = {
+        ...summary,
+        offers,
+        price_savings:
+          Math.round((summary.max_price - summary.min_price) * 100) / 100,
+      };
+      return [seed.id, detail];
+    }),
+  );
 
 // Generate offers across brands. Deterministic so dev reload is stable.
 export const mockOffers: Offer[] = (() => {

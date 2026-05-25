@@ -1,11 +1,21 @@
 import type {
   Brand,
+  CanonicalProductDetail,
+  CanonicalProductSummary,
+  CanonicalProductsPage,
+  CanonicalQuery,
   Offer,
   OfferQuery,
   OfferWithHistory,
   OffersPage,
 } from "@/lib/types";
-import { mockBrands, mockCategories, mockOffers } from "./data";
+import {
+  mockBrands,
+  mockCanonicalDetails,
+  mockCanonicalProducts,
+  mockCategories,
+  mockOffers,
+} from "./data";
 
 export function isMocksEnabled(): boolean {
   return process.env.NEXT_PUBLIC_USE_MOCKS === "true";
@@ -109,4 +119,86 @@ export const mockApi = {
     });
     return Promise.resolve({ ...found, history });
   },
+  canonicalProducts(q: CanonicalQuery = {}): Promise<CanonicalProductsPage> {
+    return Promise.resolve(
+      paginateCanonical(applyCanonicalFilters(mockCanonicalProducts, q), q),
+    );
+  },
+  canonicalProduct(id: number): Promise<CanonicalProductDetail> {
+    const found = mockCanonicalDetails[id];
+    if (!found) {
+      return Promise.reject(new Error(`canonical product ${id} not found`));
+    }
+    return Promise.resolve(found);
+  },
 };
+
+// ---------------------------------------------------------------------------
+// Canonical product mock helpers
+// ---------------------------------------------------------------------------
+
+function applyCanonicalFilters(
+  items: CanonicalProductSummary[],
+  q: CanonicalQuery,
+): CanonicalProductSummary[] {
+  let list = items;
+  if (q.q) {
+    const needle = q.q.toLowerCase();
+    list = list.filter((c) => c.display_name.toLowerCase().includes(needle));
+  }
+  if (q.brand?.length) {
+    const set = new Set(q.brand);
+    // Canonical summaries only carry the cheapest brand, so we filter on
+    // mock canonical details to honour "any member in those brands".
+    list = list.filter((c) => {
+      const detail = mockCanonicalDetails[c.id];
+      if (!detail) return set.has(c.cheapest_brand.slug);
+      return detail.offers.some((o) => set.has(o.brand.slug));
+    });
+  }
+  if (q.category) {
+    list = list.filter((c) => c.category === q.category);
+  }
+  const minBrands = q.min_brands ?? 2;
+  list = list.filter((c) => c.brands_count >= minBrands);
+
+  const sort = q.sort ?? "brands_count";
+  const dir = q.dir ?? (sort === "display_name" ? "asc" : "desc");
+  const mult = dir === "asc" ? 1 : -1;
+  list = [...list].sort((a, b) => {
+    if (sort === "display_name") {
+      return a.display_name.localeCompare(b.display_name, "el") * mult;
+    }
+    const av = a[sort];
+    const bv = b[sort];
+    if (av === bv) return 0;
+    return av > bv ? mult : -mult;
+  });
+  return list;
+}
+
+function paginateCanonical(
+  list: CanonicalProductSummary[],
+  q: CanonicalQuery,
+): CanonicalProductsPage {
+  const per_page = Math.min(q.per_page ?? 24, 100);
+  const page = q.page ?? 1;
+  const total = list.length;
+  const last_page = Math.max(1, Math.ceil(total / per_page));
+  const start = (page - 1) * per_page;
+  const data = list.slice(start, start + per_page);
+  const base = "/api/public/v1/canonical-products";
+  const link = (p: number | null) =>
+    p == null ? null : `${base}?page=${p}&per_page=${per_page}`;
+  return {
+    data,
+    meta: { current_page: page, per_page, total, last_page },
+    links: {
+      first: link(1)!,
+      last: link(last_page)!,
+      next: page < last_page ? link(page + 1) : null,
+      prev: page > 1 ? link(page - 1) : null,
+      self: link(page)!,
+    },
+  };
+}
