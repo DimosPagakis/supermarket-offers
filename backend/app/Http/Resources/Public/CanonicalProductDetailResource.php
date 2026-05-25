@@ -24,6 +24,23 @@ class CanonicalProductDetailResource extends JsonResource
     {
         $offers = $this->comparison_offers ?? [];
 
+        // Derive cheapest_brand from the comparison_offers payload — same
+        // shape the list resource exposes, so the frontend can rely on
+        // both endpoints carrying it. Offers are pre-ordered cheapest
+        // first by the controller, so the first entry's brand wins. If
+        // the list is empty we leave it null and the UI handles that.
+        $cheapestBrand = null;
+        if (!empty($offers)) {
+            $first = $offers[0]['brand'] ?? null;
+            if (is_array($first)) {
+                $cheapestBrand = [
+                    'id' => (int) $first['id'],
+                    'name' => $first['name'],
+                    'slug' => $first['slug'],
+                ];
+            }
+        }
+
         return [
             'id' => (int) $this->id,
             'canonical_key' => $this->canonical_key,
@@ -42,6 +59,7 @@ class CanonicalProductDetailResource extends JsonResource
             'max_price' => isset($this->max_price) ? (float) $this->max_price : null,
             'avg_price' => isset($this->avg_price) ? round((float) $this->avg_price, 2) : null,
             'price_savings' => isset($this->price_savings) ? round((float) $this->price_savings, 2) : null,
+            'cheapest_brand' => $cheapestBrand,
         ];
     }
 }
