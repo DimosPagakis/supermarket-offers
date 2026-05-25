@@ -34,6 +34,11 @@ class OffersIndexLatestPerProductTest extends PublicApiTestCase
         // When a filter is active (e.g. has_discount=true), the latest-per-
         // product collapse is applied AFTER filtering — so we surface the
         // latest offer of those that match, not the absolute latest.
+        //
+        // Post-2026-05-25 the DB-level trigger refuses any row with no
+        // promo signal at all; we test the filter by mixing a label-only
+        // signal row (passes ingest, fails has_discount=true) against a
+        // numeric-discount row (passes both).
         $brand = $this->makeBrand();
         $p = $this->makeProduct($brand, ['name' => 'feta', 'normalized_name' => 'feta']);
 
@@ -43,10 +48,14 @@ class OffersIndexLatestPerProductTest extends PublicApiTestCase
             'discount_pct' => 33,
             'scraped_at' => Carbon::now()->subDays(2),
         ]);
-        $newerFullPrice = $this->makeOffer($p, [
+        // Newer offer with a label-only signal: ingest accepts it,
+        // ``has_discount=true`` rejects it (discount_pct is null).
+        $newerLabelOnly = $this->makeOffer($p, [
             'price' => 6.00,
-            'original_price' => 6.00,
-            'discount_pct' => 0,
+            'original_price' => null,
+            'discount_pct' => null,
+            'promo_label' => '1+1 δώρο',
+            'promo_type' => 'bxgy_free',
             'scraped_at' => Carbon::now()->subMinutes(1),
         ]);
 

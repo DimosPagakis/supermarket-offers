@@ -75,11 +75,31 @@ class OffersIndexTest extends PublicApiTestCase
 
     public function test_has_discount_filter(): void
     {
+        // Since the discounted-only ingest policy landed (2026-05-25)
+        // every persisted offer carries some promo signal — the
+        // ``offers_require_promo_signal`` trigger refuses anything
+        // else. ``has_discount=true`` narrows to rows with
+        // ``discount_pct > 0`` specifically (vs label-only / strike-
+        // only signals); test that the filter still does what it
+        // says, by mixing a label-only signal row in with a
+        // numeric-discount row and asserting only the latter passes.
         $brand = $this->makeBrand();
-        $p1 = $this->makeProduct($brand, ['name' => 'no-disc', 'normalized_name' => 'no-disc']);
+        $p1 = $this->makeProduct($brand, ['name' => 'label-only', 'normalized_name' => 'label-only']);
         $p2 = $this->makeProduct($brand, ['name' => 'disc', 'normalized_name' => 'disc']);
-        $this->makeOffer($p1, ['price' => 5.00, 'original_price' => 5.00, 'discount_pct' => 0]);
-        $this->makeOffer($p2, ['price' => 4.00, 'original_price' => 6.00, 'discount_pct' => 33]);
+        // Label-only signal (e.g. AB "1+1 δώρο" path) — passes the
+        // ingest trigger but should not match has_discount=true.
+        $this->makeOffer($p1, [
+            'price' => 5.00,
+            'original_price' => null,
+            'discount_pct' => null,
+            'promo_label' => '1+1 δώρο',
+            'promo_type' => 'bxgy_free',
+        ]);
+        $this->makeOffer($p2, [
+            'price' => 4.00,
+            'original_price' => 6.00,
+            'discount_pct' => 33,
+        ]);
 
         $response = $this->getJson('/api/public/v1/offers?has_discount=true')->assertOk();
 
