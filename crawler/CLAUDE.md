@@ -1,0 +1,127 @@
+# Crawler — Working Notes for Claude
+
+Project: Python Scrapy crawler that scrapes Greek supermarket weekly offers and
+ships them to the Laravel backend via the `/api/v1/*` contract.
+
+> **MVP-lean**: bloat-free, fast iteration. Add complexity via small PRs only
+> when a real spider needs it. No proxy pools, no UA rotation, no anti-detection
+> magic until a brand actually blocks us.
+
+---
+
+## Testing philosophy
+
+**Favour integration tests over unit tests** — but unit tests are welcome where
+they earn their keep (pure functions, parsers, normalizers).
+
+### Where to put each kind
+
+- **Unit tests** (`tests/test_normalize.py`, `tests/test_backend_client.py`):
+  reserved for **pure logic** with no I/O — price parsing, date parsing,
+  payload shaping, HTTP client behaviour against `httpx.MockTransport`. These
+  are cheap, fast, and catch real bugs in parsers (Greek decimal commas, "Από
+  DD.MM" date ranges, etc.). Keep adding them as we encounter parsing edge
+  cases.
+- **Integration tests** (preferred for new spider work): use Scrapy's built-in
+  `parse` testing helpers or VCR-style cassettes of real HTML against frozen
+  fixtures (`tests/fixtures/<brand>/<page>.html`). Run the spider's parse
+  callback against the saved HTML and assert it yields the expected items.
+  These catch selector drift — which is what actually breaks scrapers in
+  production. Prefer this style over mocking out Scrapy internals.
+- **End-to-end smoke tests** (manual, not in CI yet): boot the backend on
+  `localhost:8000`, mint a token via `php artisan crawler:token`, set
+  `BACKEND_URL` + `BACKEND_TOKEN`, run `scrapy crawl <spider>` and inspect
+  the DB. Document the procedure in this file when we automate it.
+
+### Anti-patterns we avoid
+
+- Heavy mocking of Scrapy `Spider` internals — brittle, breaks on framework
+  upgrades, doesn't test what we care about (selector correctness).
+- Hitting the live supermarket sites in CI — rate-limit hostile, flaky, and
+  blocks deployments when the site is down.
+- Unit-testing the `BackendPipeline` by stubbing every Scrapy hook — capture
+  it in an integration test instead.
+
+---
+
+## Architecture decisions worth remembering
+
+### Why Scrapy + scrapy-playwright (hybrid)
+
+`scrapy` for static HTML chains (Lidl, My Market). Cheap, fast, built-in
+throttling, robots.txt, HTTP cache. Playwright for JS-rendered chains
+(AB Vassilopoulos, Sklavenitis, Masoutis) — the listings only render after
+JS executes. The strategy lives on each brand's `crawl_config.strategy`
+column in the backend; the spider reads it via `BACKEND_URL` + token, no
+hard-coding per brand.
+
+### Why the BackendPipeline is dev-tolerant
+
+If `BACKEND_URL` or `BACKEND_TOKEN` is missing the pipeline logs items
+instead of crashing. This lets us iterate on selectors against real HTML
+without booting the backend every time. Set both env vars for end-to-end
+runs.
+
+### Why `tenacity` only retries 5xx and network errors, not 4xx
+
+4xx means our payload is wrong (validation, expired token, unknown run_id).
+Retrying won't fix that — it'll just hammer the backend with the same bad
+request. Fail fast, log the response body, let the operator investigate.
+
+### Why the Lidl spider does a two-step landing → flyer crawl
+
+Lidl's weekly flyer URLs include a week-specific slug (e.g. `26kw21`) that
+rotates every Thursday. Hard-coding it means weekly seed updates. Instead the
+spider starts at the stable flyer landing page (`/c/fylladio-lidl/s10020481`),
+finds the most recent "Από DD.MM" anchor, and follows it. Selector drift is
+logged as a warning rather than raising — keeps the spider alive when Lidl
+re-skins the page.
+
+### Why selectors that miss log a warning instead of crashing
+
+A spider that crashes on the first selector miss is a spider that produces
+zero offers and a red alert. A spider that warns and yields nothing is one
+we can compare against yesterday's run to know exactly which selectors broke.
+The right level of paranoia for an MVP.
+
+---
+
+## Conventions
+
+- **Python 3.12+**, Pydantic v2, `httpx` for the backend client (sync — Scrapy
+  pipelines are sync by default; don't fight the framework).
+- **`OfferItem.to_payload()`** is the single source of truth for the wire
+  shape. If the backend contract changes, change it there and let the type
+  errors fan out.
+- **One spider per brand**, named after the brand slug (`lidl`, `ab`, ...).
+  Each spider sets `brand_id` so the pipeline can call
+  `POST /api/v1/crawl-runs` with the right brand.
+- **Logging via `loguru`** for our code, default Scrapy logging for framework
+  events. Don't try to unify them.
+- **`ROBOTSTXT_OBEY = True`** until a specific brand requires otherwise; if
+  we ever disable it for a brand, document why in this file.
+
+---
+
+## Adding a new spider — checklist
+
+1. Confirm the brand's `strategy` (scrapy vs playwright) and `start_url` in
+   the backend `crawl_configs` table; update the seeder if it's wrong.
+2. Save 1–2 real HTML pages under `tests/fixtures/<brand>/` for replay tests.
+3. Write a parse integration test against the fixture first. Run it red.
+4. Implement the spider until the test goes green.
+5. Add unit tests only for any new pure-logic helpers (date formats etc.).
+6. Smoke-run locally with the backend up; confirm offers land in the DB.
+7. Update the brand-status table in `README.md`.
+
+---
+
+## Things to push back on if the user asks for them
+
+- Proxy pools, residential IPs, UA rotation — defer until we actually get
+  blocked.
+- Async pipeline — Scrapy's pipeline hooks are sync; switching to async
+  Scrapy buys nothing for a 5-brand MVP.
+- Heavy ORM-style item models — Pydantic is enough.
+- A scheduler inside the crawler — Laravel owns scheduling, we are
+  HTTP-triggered (or `scrapy crawl` from cron in early MVP).
