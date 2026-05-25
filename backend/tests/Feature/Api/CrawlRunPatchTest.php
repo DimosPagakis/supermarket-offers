@@ -108,4 +108,41 @@ class CrawlRunPatchTest extends ApiTestCase
             'offers_found' => 1,
         ])->assertUnprocessable()->assertJsonValidationErrors('status');
     }
+
+    public function test_terminal_run_cannot_be_patched_again(): void
+    {
+        $this->authedAsCrawler();
+        $run = $this->makeRun();
+        $run->update([
+            'status' => CrawlRun::STATUS_SUCCESS,
+            'finished_at' => now(),
+            'offers_found' => 5,
+            'offers_persisted' => 5,
+        ]);
+
+        $this->patchJson("/api/v1/crawl-runs/{$run->id}", [
+            'status' => 'failed',
+            'offers_found' => 0,
+            'error_message' => 'trying to flip a closed run',
+        ])->assertUnprocessable()->assertJsonValidationErrors('run');
+
+        $run->refresh();
+        $this->assertSame(CrawlRun::STATUS_SUCCESS, $run->status);
+        $this->assertSame(5, $run->offers_found);
+    }
+
+    public function test_persisted_exceeding_found_is_rejected(): void
+    {
+        $this->authedAsCrawler();
+        $run = $this->makeRun();
+
+        $this->patchJson("/api/v1/crawl-runs/{$run->id}", [
+            'status' => 'success',
+            'offers_found' => 10,
+            'offers_persisted' => 11,
+        ])->assertUnprocessable()->assertJsonValidationErrors('offers_persisted');
+
+        $run->refresh();
+        $this->assertSame(CrawlRun::STATUS_RUNNING, $run->status);
+    }
 }

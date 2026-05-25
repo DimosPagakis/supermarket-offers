@@ -6,6 +6,8 @@ use App\Models\Brand;
 use App\Models\CrawlRun;
 use App\Models\Offer;
 use App\Models\Product;
+use App\Services\ProductResolver;
+use RuntimeException;
 
 class CrawlRunOffersTest extends ApiTestCase
 {
@@ -150,5 +152,101 @@ class CrawlRunOffersTest extends ApiTestCase
         $this->postJson("/api/v1/crawl-runs/{$run->id}/offers", [
             'offers' => [],
         ])->assertUnprocessable()->assertJsonValidationErrors('offers');
+    }
+
+    public function test_pushing_to_finished_run_is_rejected(): void
+    {
+        $this->authedAsCrawler();
+        $run = $this->makeRun();
+        $run->update([
+            'status' => CrawlRun::STATUS_SUCCESS,
+            'finished_at' => now(),
+        ]);
+
+        $this->postJson("/api/v1/crawl-runs/{$run->id}/offers", [
+            'offers' => [
+                [
+                    'name' => 'Late Arrival',
+                    'price' => 1.00,
+                    'currency' => 'EUR',
+                    'scraped_at' => '2026-05-25T08:00:00Z',
+                ],
+            ],
+        ])->assertUnprocessable()->assertJsonValidationErrors('run');
+
+        $this->assertSame(0, Offer::query()->where('crawl_run_id', $run->id)->count());
+    }
+
+    public function test_invalid_date_range_is_rejected(): void
+    {
+        $this->authedAsCrawler();
+        $run = $this->makeRun();
+
+        $this->postJson("/api/v1/crawl-runs/{$run->id}/offers", [
+            'offers' => [
+                [
+                    'name' => 'Time Traveller',
+                    'price' => 1.00,
+                    'currency' => 'EUR',
+                    'valid_from' => '2026-06-10',
+                    'valid_to' => '2026-06-01',
+                    'scraped_at' => '2026-05-25T08:00:00Z',
+                ],
+            ],
+        ])->assertUnprocessable()->assertJsonValidationErrors('offers.0.valid_to');
+    }
+
+    public function test_transaction_rolls_back_on_resolver_exception(): void
+    {
+        $this->authedAsCrawler();
+        $run = $this->makeRun();
+
+        // Swap the resolver for one that explodes on the second item, so we
+        // can prove (a) the response is a structured 500 and (b) nothing
+        // from the batch — not even the first item — gets persisted.
+        $this->mock(ProductResolver::class, function ($mock) {
+            $mock->shouldReceive('resolve')
+                ->once()
+                ->andReturn([
+                    'product' => Product::create([
+                        'brand_id' => 1,
+                        'external_id' => 'OK',
+                        'name' => 'First',
+                        'normalized_name' => 'first',
+                    ]),
+                    'created' => true,
+                    'updated' => false,
+                ]);
+            $mock->shouldReceive('resolve')
+                ->once()
+                ->andThrow(new RuntimeException('boom'));
+        });
+
+        $response = $this->postJson("/api/v1/crawl-runs/{$run->id}/offers", [
+            'offers' => [
+                [
+                    'name' => 'First',
+                    'price' => 1.00,
+                    'currency' => 'EUR',
+                    'scraped_at' => '2026-05-25T08:00:00Z',
+                ],
+                [
+                    'name' => 'Second',
+                    'price' => 2.00,
+                    'currency' => 'EUR',
+                    'scraped_at' => '2026-05-25T08:00:00Z',
+                ],
+            ],
+        ])->assertStatus(500);
+
+        $response->assertJsonPath('error', 'offer_push_failed');
+        $this->assertStringContainsString('Safe to retry', $response->json('message'));
+
+        // No offers should have made it into the DB — full rollback.
+        $this->assertSame(0, Offer::query()->where('crawl_run_id', $run->id)->count());
+        // The first-item Product created inside the mocked resolver call
+        // happens outside the controller's transaction (the mock instantiates
+        // it eagerly), so we don't assert on Product counts here — only on
+        // the controller-managed Offer rows.
     }
 }

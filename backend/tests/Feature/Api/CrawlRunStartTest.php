@@ -61,4 +61,22 @@ class CrawlRunStartTest extends ApiTestCase
             'triggered_by' => 'cosmic-ray',
         ])->assertUnprocessable()->assertJsonValidationErrors('triggered_by');
     }
+
+    public function test_inactive_brand_is_rejected(): void
+    {
+        $this->authedAsCrawler();
+        $brand = Brand::create([
+            'name' => 'Paused Chain',
+            'slug' => 'paused',
+            'website_url' => 'https://paused.gr',
+            'active' => false,
+        ]);
+
+        $this->postJson('/api/v1/crawl-runs', [
+            'brand_id' => $brand->id,
+            'triggered_by' => 'schedule',
+        ])->assertUnprocessable()->assertJsonValidationErrors('brand_id');
+
+        $this->assertDatabaseMissing('crawl_runs', ['brand_id' => $brand->id]);
+    }
 }
