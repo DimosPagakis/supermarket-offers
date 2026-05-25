@@ -46,7 +46,7 @@ class CrawlerDispatchCommand extends Command
 
     private function dispatchAll(string $triggeredBy): int
     {
-        $brands = Brand::where('active', true)->orderBy('slug')->get();
+        $brands = Brand::query()->active()->orderBy('slug')->get();
 
         if ($brands->isEmpty()) {
             $this->warn('No active brands to dispatch.');

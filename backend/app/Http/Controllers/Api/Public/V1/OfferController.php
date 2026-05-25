@@ -13,7 +13,6 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Resources\Json\ResourceCollection;
 use Illuminate\Support\Carbon;
-use Illuminate\Support\Facades\DB;
 
 class OfferController extends Controller
 {
@@ -52,14 +51,9 @@ class OfferController extends Controller
 
         $base = $this->buildFilteredOfferQuery($filters, $brandSlugs);
 
-        // Latest-per-product collapse: pick MAX(id) per product_id over the
-        // filtered set, then re-query offers WHERE id IN (...). Using MAX(id)
-        // (not MAX(scraped_at)) gives us a deterministic single row even
-        // when two offers for the same product share scraped_at; ids are
-        // monotonic so the higher id is the more recently inserted row.
-        $latestIds = (clone $base)
-            ->select(DB::raw('MAX(offers.id) as id'))
-            ->groupBy('offers.product_id');
+        // Collapse to one offer per product (latest by id). See
+        // Offer::latestPerProductIds() for the why-MAX(id) rationale.
+        $latestIds = Offer::latestPerProductIds($base);
 
         $sort = $filters['sort'] ?? 'discount_pct';
         $dir = $filters['dir'] ?? 'desc';
