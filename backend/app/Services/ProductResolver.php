@@ -7,6 +7,8 @@ use App\Support\StringNormalizer;
 
 class ProductResolver
 {
+    public function __construct(private readonly VariantDescriber $describer = new VariantDescriber()) {}
+
     /**
      * Resolve a Product for the given brand & scraped offer payload.
      *
@@ -16,6 +18,14 @@ class ProductResolver
      *
      * On every resolve we refresh mutable product attributes (name, url,
      * image_url, category, unit) so the latest crawl is the source of truth.
+     *
+     * Family-browse feature columns (`manufacturer_brand`,
+     * `category_normalised`, `size_value`, `size_unit`, `pack_count`,
+     * `variant_descriptor`) are recomputed every pass via
+     * {@see VariantDescriber} — they're a pure function of `name` +
+     * `category`, so refreshing them keeps the family index in sync
+     * with whatever the latest crawl reports. This is cheap (regex on a
+     * single string) and saves us from a second job/cron.
      *
      * @return array{product: Product, created: bool, updated: bool}
      */
@@ -40,6 +50,8 @@ class ProductResolver
                 ->first();
         }
 
+        $features = $this->describer->extract($name, $offerData['category'] ?? null);
+
         $attributes = [
             'name' => $name,
             'normalized_name' => $normalized,
@@ -47,6 +59,12 @@ class ProductResolver
             'image_url' => $offerData['image_url'] ?? null,
             'category' => $offerData['category'] ?? null,
             'unit' => $offerData['unit'] ?? null,
+            'manufacturer_brand' => $features['manufacturer_brand'],
+            'category_normalised' => $features['category_normalised'],
+            'size_value' => $features['size_value'],
+            'size_unit' => $features['size_unit'],
+            'pack_count' => $features['pack_count'],
+            'variant_descriptor' => $features['variant_descriptor'],
         ];
 
         if ($product === null) {

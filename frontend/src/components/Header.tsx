@@ -28,6 +28,12 @@ export function Header() {
               Σύγκριση
             </Link>
             <Link
+              href="/families"
+              className="rounded-md py-1 transition-colors hover:text-brand"
+            >
+              Παραλλαγές
+            </Link>
+            <Link
               href="/about"
               className="rounded-md py-1 transition-colors hover:text-brand"
             >

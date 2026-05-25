@@ -12,6 +12,9 @@ import type {
   CanonicalProductDetail,
   CanonicalProductsPage,
   CanonicalQuery,
+  FamiliesPage,
+  FamilyDetail,
+  FamilyQuery,
   OfferQuery,
   OfferWithHistory,
   OffersPage,
@@ -27,10 +30,12 @@ const OFFERS_TAG = "offers";
 const BRANDS_TAG = "brands";
 const CATEGORIES_TAG = "categories";
 const CANONICAL_TAG = "canonical-products";
+const FAMILIES_TAG = "families";
 
 const REVALIDATE_OFFERS = 60 * 5; // 5 min
 const REVALIDATE_REFERENCE = 60 * 60; // 1 hour for brands + categories
 const REVALIDATE_CANONICAL = 60 * 5; // 5 min — comparison data tracks offers
+const REVALIDATE_FAMILIES = 60 * 5; // 5 min — family pricing tracks offers
 
 export function buildOfferQueryString(params: OfferQuery): string {
   const sp = new URLSearchParams();
@@ -177,6 +182,55 @@ export async function fetchCanonicalProduct(
   return json.data;
 }
 
+// ---------------------------------------------------------------------------
+// Family browse — same shape contract as the other public endpoints, see
+// docs/canonicalisation-design.md §"A note on family-browse" for why this
+// is its own endpoint family rather than a canonical-products reuse.
+// ---------------------------------------------------------------------------
+
+export function buildFamilyQueryString(params: FamilyQuery): string {
+  const sp = new URLSearchParams();
+  if (params.q) sp.set("q", params.q);
+  if (params.brand?.length) sp.set("brand", params.brand.join(","));
+  if (params.manufacturer) sp.set("manufacturer", params.manufacturer);
+  if (params.category) sp.set("category", params.category);
+  if (typeof params.min_variants === "number")
+    sp.set("min_variants", String(params.min_variants));
+  if (typeof params.min_brands === "number")
+    sp.set("min_brands", String(params.min_brands));
+  if (params.sort) sp.set("sort", params.sort);
+  if (params.dir) sp.set("dir", params.dir);
+  if (params.page) sp.set("page", String(params.page));
+  if (params.per_page) sp.set("per_page", String(params.per_page));
+  const s = sp.toString();
+  return s ? `?${s}` : "";
+}
+
+export async function fetchFamilies(
+  params: FamilyQuery = {},
+): Promise<FamiliesPage> {
+  if (isMocksEnabled()) return mockApi.families(params);
+  const qs = buildFamilyQueryString(params);
+  return apiFetch<FamiliesPage>(`/families${qs}`, {
+    tag: FAMILIES_TAG,
+    revalidate: REVALIDATE_FAMILIES,
+  });
+}
+
+export async function fetchFamily(key: string): Promise<FamilyDetail> {
+  if (isMocksEnabled()) return mockApi.family(key);
+  // Family keys use `|` as a separator and include Greek text — encode
+  // the segment so it survives the URL pipe-trim and any reverse-proxy
+  // normalisation. The route binding is `{key}` with `.*` so the
+  // backend accepts the encoded segment as one piece.
+  const encoded = encodeURIComponent(key);
+  const json = await apiFetch<{ data: FamilyDetail }>(`/families/${encoded}`, {
+    tag: FAMILIES_TAG,
+    revalidate: REVALIDATE_FAMILIES,
+  });
+  return json.data;
+}
+
 // Re-export so callers can keep imports tidy.
 export type {
   Brand,
@@ -184,6 +238,10 @@ export type {
   CanonicalProductSummary,
   CanonicalProductsPage,
   CanonicalQuery,
+  FamiliesPage,
+  FamilyDetail,
+  FamilyQuery,
+  FamilySummary,
   Offer,
   OfferQuery,
   OfferWithHistory,
