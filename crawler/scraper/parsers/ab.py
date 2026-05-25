@@ -218,22 +218,28 @@ def _pick_offer_promotion(
         elif p.get("toDisplay") and not by_type[t].get("toDisplay"):
             by_type[t] = p
 
-    if "Buy X Get Percentage Off All Products" in by_type:
-        return by_type["Buy X Get Percentage Off All Products"], FAMILY_BXG_PCT
-    if "Grocery Buy X get Y free" in by_type:
-        return by_type["Grocery Buy X get Y free"], FAMILY_BXGY_FREE
-    if "Discount X Euros For Y Articles" in by_type:
-        return by_type["Discount X Euros For Y Articles"], FAMILY_DISCOUNT_EUROS
-    if "Fixed Points For Threshold Promotion" in by_type:
-        return by_type["Fixed Points For Threshold Promotion"], FAMILY_FIXED_POINTS
-    if "X Plus points for Y articles" in by_type:
-        return by_type["X Plus points for Y articles"], FAMILY_PLUS_POINTS
+    for promo_type, family in _AB_PROMO_PRIORITY:
+        if promo_type in by_type:
+            return by_type[promo_type], family
 
     # Everything else — including "Grocery Multi-buy" variants we haven't
     # specifically modelled. Log once at DEBUG so we notice new families.
-    unknown_types = sorted(by_type.keys())
-    logger.debug("ab-parser: skipping unknown promotion families: {}", unknown_types)
+    logger.debug(
+        "ab-parser: skipping unknown promotion families: {}",
+        sorted(by_type.keys()),
+    )
     return None, FAMILY_UNKNOWN
+
+
+# AB promotion-type → emit-family priority ladder. Same ordering the
+# storefront uses for its visible badge precedence; see _pick_offer_promotion.
+_AB_PROMO_PRIORITY: tuple[tuple[str, str], ...] = (
+    ("Buy X Get Percentage Off All Products", FAMILY_BXG_PCT),
+    ("Grocery Buy X get Y free", FAMILY_BXGY_FREE),
+    ("Discount X Euros For Y Articles", FAMILY_DISCOUNT_EUROS),
+    ("Fixed Points For Threshold Promotion", FAMILY_FIXED_POINTS),
+    ("X Plus points for Y articles", FAMILY_PLUS_POINTS),
+)
 
 
 # --- OfferItem builders, one per emitted family --------------------------

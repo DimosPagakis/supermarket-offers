@@ -134,26 +134,19 @@ class LidlSpider(scrapy.Spider):
     # --- Step 1: homepage -> active campaign URLs ----------------------------
 
     def parse(self, response: Response, **_: Any) -> Any:
-        # Collect every anchor that matches the Lidl campaign URL shape.
-        hrefs = response.css("a::attr(href)").getall()
-        campaign_paths: list[str] = []
-        for raw in hrefs:
-            if not raw:
-                continue
-            parsed = urlparse(raw)
-            path = parsed.path
-            if _CAMPAIGN_HREF_RE.match(path):
-                campaign_paths.append(path)
-
-        # Dedupe while preserving order. Lidl repeats the same campaign in
-        # multiple homepage sections (hero, carousel, footer); we only need
-        # to crawl each one once.
-        seen: set[str] = set()
-        ordered_unique: list[str] = []
-        for path in campaign_paths:
-            if path not in seen:
-                seen.add(path)
-                ordered_unique.append(path)
+        # Collect every anchor matching the Lidl campaign URL shape, then
+        # dedupe while preserving order — Lidl repeats the same campaign
+        # in multiple homepage sections (hero, carousel, footer); we only
+        # need to crawl each one once. ``dict.fromkeys`` preserves
+        # insertion order in Python 3.7+.
+        campaign_paths = (
+            urlparse(href).path
+            for href in response.css("a::attr(href)").getall()
+            if href
+        )
+        ordered_unique = list(dict.fromkeys(
+            p for p in campaign_paths if _CAMPAIGN_HREF_RE.match(p)
+        ))
 
         if not ordered_unique:
             logger.warning(
