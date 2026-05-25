@@ -61,25 +61,31 @@ export function CanonicalCard({ product, priority = false }: Props) {
         )}
       </div>
 
-      <div className="flex flex-1 flex-col gap-2 px-1">
+      <div className="flex flex-1 flex-col gap-1.5 px-1">
         <h3 className="line-clamp-2 min-h-[2.75rem] text-[15px] font-semibold leading-snug text-ink">
           {display_name}
         </h3>
 
-        {/* Meta: cheapest brand dot + chain count + category, single line. */}
-        <div className="flex min-w-0 items-center gap-2 text-[11px] text-ink-muted">
-          {cheapest_brand && <BrandChip brand={cheapest_brand} size="dot" />}
-          <span aria-hidden className="text-ink-muted/50">·</span>
-          <span className="shrink-0 font-medium text-brand">
-            {everywhere ? `${brands_count} αλυσίδες` : `σε ${brands_count}`}
-          </span>
+        {/* Chain count gets its own emphasised line — it's the unique
+            value prop of the canonical card. */}
+        <p className="text-[11px] font-semibold text-brand">
+          {everywhere
+            ? `Σε ${brands_count} αλυσίδες · παντού`
+            : `Σε ${brands_count} αλυσίδες`}
+        </p>
+
+        {/* Cheapest brand + category, split 50/50, independent truncate. */}
+        <div className="grid min-w-0 grid-cols-2 items-center gap-2 text-[11px] text-ink-muted">
+          <div className="min-w-0">
+            {cheapest_brand && <BrandChip brand={cheapest_brand} size="dot" />}
+          </div>
           {category && (
-            <>
-              <span aria-hidden className="text-ink-muted/50">·</span>
-              <span className="truncate" title={category}>
-                {category}
-              </span>
-            </>
+            <span
+              className="min-w-0 truncate text-right"
+              title={category}
+            >
+              {category}
+            </span>
           )}
         </div>
 

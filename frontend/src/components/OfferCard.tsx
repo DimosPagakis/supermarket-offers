@@ -65,30 +65,31 @@ export function OfferCard({ offer, priority = false }: Props) {
         )}
       </div>
 
-      <div className="flex flex-1 flex-col gap-2 px-1">
+      <div className="flex flex-1 flex-col gap-1.5 px-1">
         {/* Title gets prime real estate — base size, two lines max with
             comfortable leading so Greek diacritics breathe. */}
         <h3 className="line-clamp-2 min-h-[2.75rem] text-[15px] font-semibold leading-snug text-ink">
           {product.name}
         </h3>
 
-        {/* Meta line: brand dot + category. Single row, ellipsis on
-            overflow so we never get a wrapped two-line brand pill again. */}
-        <div className="flex min-w-0 items-center gap-2 text-[11px] text-ink-muted">
-          <BrandChip brand={brand} size="dot" />
+        {/* Unit on its own line so it doesn't compete with brand/category. */}
+        {product.unit && (
+          <p className="text-[11px] text-ink-muted">{product.unit}</p>
+        )}
+
+        {/* Brand + category, split 50/50, each truncates independently —
+            so neither dominates and we never wrap the brand to two lines. */}
+        <div className="grid min-w-0 grid-cols-2 items-center gap-2 text-[11px] text-ink-muted">
+          <div className="min-w-0">
+            <BrandChip brand={brand} size="dot" />
+          </div>
           {product.category && (
-            <>
-              <span aria-hidden className="text-ink-muted/50">·</span>
-              <span className="truncate" title={product.category}>
-                {product.category}
-              </span>
-            </>
-          )}
-          {product.unit && (
-            <>
-              <span aria-hidden className="text-ink-muted/50">·</span>
-              <span className="shrink-0">{product.unit}</span>
-            </>
+            <span
+              className="min-w-0 truncate text-right"
+              title={product.category}
+            >
+              {product.category}
+            </span>
           )}
         </div>
 
