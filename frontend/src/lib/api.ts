@@ -98,11 +98,22 @@ export async function fetchBrands(): Promise<Brand[]> {
 
 export async function fetchCategories(): Promise<string[]> {
   if (isMocksEnabled()) return mockApi.categories();
-  const json = await apiFetch<{ data: string[] }>("/categories", {
-    tag: CATEGORIES_TAG,
-    revalidate: REVALIDATE_REFERENCE,
-  });
-  return json.data;
+  // The backend wraps each category in a `{ name }` resource so the
+  // shape can grow attributes later (count, slug, etc.) without breaking
+  // existing consumers. We flatten to a string[] here so the rest of
+  // the frontend can treat categories as plain values. If a future
+  // backend revision ships extra fields, lift this map to a richer
+  // type at the call sites.
+  const json = await apiFetch<{ data: Array<string | { name: string }> }>(
+    "/categories",
+    {
+      tag: CATEGORIES_TAG,
+      revalidate: REVALIDATE_REFERENCE,
+    },
+  );
+  return json.data.map((entry) =>
+    typeof entry === "string" ? entry : entry.name,
+  );
 }
 
 export async function fetchBrandOffers(
