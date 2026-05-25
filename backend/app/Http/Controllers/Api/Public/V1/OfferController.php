@@ -109,7 +109,7 @@ class OfferController extends Controller
                     'original_price' => $row->original_price !== null ? (float) $row->original_price : null,
                     'discount_pct' => $row->discount_pct !== null ? (int) $row->discount_pct : null,
                     'currency' => $row->currency,
-                    'scraped_at' => optional($row->scraped_at)->toIso8601String(),
+                    'scraped_at' => $row->scraped_at?->toIso8601String(),
                 ])
                 ->all();
 

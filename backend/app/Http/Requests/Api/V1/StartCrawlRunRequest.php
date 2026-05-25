@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Api\V1;
 
+use App\Models\CrawlRun;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -34,7 +35,7 @@ class StartCrawlRunRequest extends FormRequest
                 'integer',
                 Rule::exists('brands', 'id')->where('active', true),
             ],
-            'triggered_by' => ['required', 'string', 'in:schedule,manual,api'],
+            'triggered_by' => ['required', 'string', Rule::in(CrawlRun::TRIGGER_SOURCES)],
         ];
     }
 
