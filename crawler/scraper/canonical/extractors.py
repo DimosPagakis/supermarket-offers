@@ -72,11 +72,6 @@ _GREEK_TO_LATIN = str.maketrans({
 })
 
 
-def _fold_to_ascii(s: str) -> str:
-    """Lowercase + accent strip + Greek→Latin look-alike fold."""
-    return _fold_lower(s).translate(_GREEK_TO_LATIN)
-
-
 # ---------------------------------------------------------------------------
 # Manufacturer extractor
 # ---------------------------------------------------------------------------
