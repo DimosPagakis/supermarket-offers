@@ -24,6 +24,33 @@ function toggleInCsv(csv: string | null, value: string): string {
 const DISCOUNT_STEPS = [0, 10, 20, 30, 50] as const;
 
 /**
+ * Combined (sort, dir) options surfaced to the user as a single dropdown.
+ * The backend already exposes `sort=price|discount_pct|scraped_at` and
+ * `dir=asc|desc` independently; collapsing them into a labelled menu
+ * matches how shoppers actually think about it ("biggest discount", not
+ * "discount_pct desc").
+ */
+const SORT_OPTIONS: ReadonlyArray<{
+  key: string;
+  label: string;
+  sort: "scraped_at" | "discount_pct" | "price";
+  dir: "asc" | "desc";
+}> = [
+  { key: "newest",          label: "Νεότερες πρώτα",      sort: "scraped_at", dir: "desc" },
+  { key: "discount_desc",   label: "Μεγαλύτερη έκπτωση",  sort: "discount_pct", dir: "desc" },
+  { key: "discount_asc",    label: "Μικρότερη έκπτωση",   sort: "discount_pct", dir: "asc" },
+  { key: "price_asc",       label: "Φθηνότερα πρώτα",     sort: "price", dir: "asc" },
+  { key: "price_desc",      label: "Ακριβότερα πρώτα",    sort: "price", dir: "desc" },
+];
+
+function sortOptionKey(sort: string | null, dir: string | null): string {
+  const found = SORT_OPTIONS.find(
+    (o) => o.sort === sort && o.dir === (dir ?? "desc"),
+  );
+  return found?.key ?? "";
+}
+
+/**
  * Compact horizontal filter bar shared by `/`, `/offers`, and `/brand/[slug]`.
  * Mirrors the layout of `CanonicalFiltersBar` so the catalogue and the
  * comparison surface read as the same product. URL-driven, with the
@@ -49,12 +76,17 @@ export function OffersFiltersBar({ brands, categories, lockedBrand }: Props) {
   const selectedCategory = searchParams.get("category") ?? "";
   const minDiscount = Number(searchParams.get("min_discount") ?? "0");
   const validOnly = searchParams.get("has_discount") === "true";
+  const currentSortKey = sortOptionKey(
+    searchParams.get("sort"),
+    searchParams.get("dir"),
+  );
 
   const activeCount =
     (lockedBrand ? 0 : selectedBrands.size > 0 ? 1 : 0) +
     (selectedCategory ? 1 : 0) +
     (minDiscount > 0 ? 1 : 0) +
-    (validOnly ? 1 : 0);
+    (validOnly ? 1 : 0) +
+    (currentSortKey && currentSortKey !== "newest" ? 1 : 0);
 
   // Hold the URL we *intended* to navigate to, regardless of whether
   // React's transition has committed it yet. Without this, rapid clicks
@@ -104,6 +136,18 @@ export function OffersFiltersBar({ brands, categories, lockedBrand }: Props) {
     updateParam((sp) => {
       if (sp.get("has_discount") === "true") sp.delete("has_discount");
       else sp.set("has_discount", "true");
+    });
+
+  const onChangeSort = (key: string) =>
+    updateParam((sp) => {
+      const opt = SORT_OPTIONS.find((o) => o.key === key);
+      if (!opt) {
+        sp.delete("sort");
+        sp.delete("dir");
+        return;
+      }
+      sp.set("sort", opt.sort);
+      sp.set("dir", opt.dir);
     });
 
   const onReset = () => {
@@ -217,6 +261,25 @@ export function OffersFiltersBar({ brands, categories, lockedBrand }: Props) {
         >
           Μόνο εκπτώσεις
         </button>
+
+        {/* Sort dropdown — collapses (sort, dir) into a single labelled
+            choice. Empty value falls back to the server-side default
+            per page (e.g. newest on /offers, biggest discount on /). */}
+        <label className="flex items-center gap-2 text-xs font-semibold text-ink-soft">
+          Ταξινόμηση
+          <select
+            value={currentSortKey}
+            onChange={(e) => onChangeSort(e.target.value)}
+            className="rounded-[var(--radius-soft)] bg-canvas px-3 py-1.5 text-sm font-normal text-ink shadow-inset focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+          >
+            <option value="">Προεπιλογή</option>
+            {SORT_OPTIONS.map((o) => (
+              <option key={o.key} value={o.key}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+        </label>
 
         {/* Reset chip */}
         {activeCount > 0 && (
