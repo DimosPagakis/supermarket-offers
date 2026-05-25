@@ -25,15 +25,16 @@ class BrandSeeder extends Seeder
                 'name' => 'Sklavenitis',
                 'slug' => 'sklavenitis',
                 'website_url' => 'https://www.sklavenitis.gr',
-                // Sklavenitis sits behind Akamai Bot Manager (errors.edgesuite.net).
-                // Even headless Chromium with stealth flags + realistic UA gets
-                // 403 "Access Denied" on every page. Bypassing that requires
-                // residential proxies and TLS-fingerprint impersonation — out
-                // of scope for the MVP. Marking inactive so spider runs skip
-                // this brand. Revisit when we have proxy budget.
-                'start_url' => 'https://www.sklavenitis.gr/sylloges/prosfores',
-                'strategy' => 'playwright',
-                'active' => false,
+                // Sklavenitis sits behind Akamai Bot Manager. Plain HTTP +
+                // headless Chromium both 403 instantly because Akamai
+                // fingerprints the TLS ClientHello. The spider sidesteps
+                // that with curl_cffi Chrome JA3 impersonation (see
+                // crawler/scraper/spiders/sklavenitis.py). Strategy is
+                // labelled `http_api` because the fetch path is plain
+                // HTTP (no Playwright); the trick is at the TLS layer.
+                'start_url' => 'https://www.sklavenitis.gr/sylloges/prosfores/',
+                'strategy' => 'http_api',
+                'active' => true,
             ],
             [
                 'name' => 'Lidl Hellas',
