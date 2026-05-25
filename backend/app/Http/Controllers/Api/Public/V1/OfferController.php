@@ -38,16 +38,14 @@ class OfferController extends Controller
     {
         $filters = $request->validated();
 
-        $brandSlugs = null;
-        if ($brand !== null) {
-            // Route-scoped: /brands/{slug}/offers — fixed to a single brand.
-            $brandSlugs = [$brand->slug];
-        } elseif (isset($filters['brand'])) {
-            $brandSlugs = array_values(array_filter(array_map(
-                'trim',
-                explode(',', (string) $filters['brand']),
-            )));
-        }
+        // The route can pin to one brand (/brands/{slug}/offers) or the
+        // query string can scope to a CSV of slugs (?brand=ab,lidl).
+        // Route binding wins when present.
+        $brandSlugs = match (true) {
+            $brand !== null => [$brand->slug],
+            isset($filters['brand']) => $this->parseCsv((string) $filters['brand']),
+            default => null,
+        };
 
         $base = $this->buildFilteredOfferQuery($filters, $brandSlugs);
 
@@ -174,6 +172,19 @@ class OfferController extends Controller
         }
 
         return $query->select('offers.*');
+    }
+
+    /**
+     * Parse a CSV query parameter into a clean list — trimmed, with
+     * empty entries dropped. Returns a 0-indexed array suitable for
+     * `whereIn`. An all-empty input collapses to an empty array which
+     * the caller should treat as "no filter".
+     *
+     * @return array<int, string>
+     */
+    private function parseCsv(string $value): array
+    {
+        return array_values(array_filter(array_map('trim', explode(',', $value)), fn (string $s) => $s !== ''));
     }
 
     /**
