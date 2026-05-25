@@ -280,6 +280,137 @@ curl -s "$API/brands/ab/offers?sort=price&dir=asc"
 
 ---
 
+### Canonical products
+
+Canonical products are cross-chain SKU groupings — one row per physical
+product, with each chain's `products` row attached as a "member".
+They power the comparison feature: pick a canonical, see every chain
+that stocks it, sorted by price.
+
+The grouping is computed offline by the canonicalisation algorithm
+(see `docs/canonicalisation-design.md`) and pushed in via the
+authenticated `/api/v1/canonical-products/bulk-upsert` endpoint. The
+public read endpoints below surface the read side.
+
+`brands_count` is the number of distinct chains that carry the
+canonical — the list view defaults to `min_brands=2` so the response
+is comparison-meaningful (a canonical only one chain stocks has
+nothing to compare against). `min_price` / `max_price` / `avg_price`
+are computed from the latest current offer of each member at request
+time, so they always reflect what the comparison page would show.
+`cheapest_brand` on the list view points at the brand currently
+holding the lowest price — the same brand the detail view's first
+offer row will name.
+
+---
+
+### `GET /canonical-products`
+
+#### Query parameters
+
+| Parameter | Type | Default | Notes |
+|---|---|---|---|
+| `q` | string | — | Case-insensitive LIKE on `display_name`. |
+| `brand` | csv of slugs | — | Filters to canonicals with ≥1 member in any of these brands. |
+| `category` | string | — | Case-insensitive exact match. |
+| `min_brands` | int 1–10 | 2 | Only canonicals with `brands_count >= min_brands`. |
+| `sort` | `members_count \| brands_count \| display_name` | `brands_count` | |
+| `dir` | `asc \| desc` | `desc` | |
+| `page` | int ≥1 | 1 | |
+| `per_page` | int 1–100 | 50 | |
+
+```bash
+# Default: multi-brand canonicals, most-compared first.
+curl -s "$API/canonical-products"
+
+# Text search + category filter.
+curl -s "$API/canonical-products?q=Lacta&category=$(printf '%s' 'Σοκολάτες' | jq -sRr @uri)"
+
+# Show every canonical, including single-brand ones (admin-style view).
+curl -s "$API/canonical-products?min_brands=1&sort=display_name&dir=asc"
+```
+
+A single response row:
+
+```json
+{
+  "id": 1,
+  "canonical_key": "lacta:gofreta-foundouki:31g:1",
+  "manufacturer_brand": "Lacta",
+  "size_value": 31,
+  "size_unit": "g",
+  "pack_count": 1,
+  "variant_descriptor": "Φουντούκι",
+  "display_name": "Lacta Γκοφρέτα Φουντούκι 31g",
+  "category": "Σοκολάτες",
+  "image_url": "https://cdn.example/lacta.jpg",
+  "members_count": 2,
+  "brands_count": 2,
+  "min_price": 1.1,
+  "max_price": 1.2,
+  "avg_price": 1.15,
+  "cheapest_brand": { "id": 2, "name": "Sklavenitis", "slug": "sklavenitis" }
+}
+```
+
+---
+
+### `GET /canonical-products/{id}`
+
+The full comparison view — every chain that stocks the canonical,
+with the current offer for each, sorted cheapest first.
+
+```bash
+curl -s "$API/canonical-products/1"
+```
+
+```json
+{
+  "data": {
+    "id": 1,
+    "canonical_key": "lacta:gofreta-foundouki:31g:1",
+    "manufacturer_brand": "Lacta",
+    "size_value": 31,
+    "size_unit": "g",
+    "pack_count": 1,
+    "variant_descriptor": "Φουντούκι",
+    "display_name": "Lacta Γκοφρέτα Φουντούκι 31g",
+    "category": "Σοκολάτες",
+    "image_url": "https://cdn.example/lacta.jpg",
+    "members_count": 2,
+    "brands_count": 2,
+    "offers": [
+      {
+        "brand": { "id": 2, "name": "Sklavenitis", "slug": "sklavenitis", "country_code": "GR" },
+        "product": { "id": 2, "name": "Lacta Γκοφρέτα 31gr", "url": "https://...", "image_url": "https://..." },
+        "offer": { "id": 12, "price": 1.10, "original_price": 1.40, "discount_pct": 21, "valid_from": null, "valid_to": null, "scraped_at": "2026-05-25T13:05:16+00:00" }
+      },
+      {
+        "brand": { "id": 1, "name": "AB Vassilopoulos", "slug": "ab", "country_code": "GR" },
+        "product": { "id": 1, "name": "LACTA Γκοφρέτα 31g", "url": "https://...", "image_url": "https://..." },
+        "offer": { "id": 11, "price": 1.20, "original_price": null, "discount_pct": null, "valid_from": null, "valid_to": null, "scraped_at": "2026-05-25T13:05:16+00:00" }
+      }
+    ],
+    "min_price": 1.10,
+    "max_price": 1.20,
+    "avg_price": 1.15,
+    "price_savings": 0.10
+  }
+}
+```
+
+Notes on detail-view semantics:
+
+- One offer per member product (latest by `id`). The detail view filters
+  out offers whose `valid_to` has elapsed; a canonical whose only member
+  offers have expired returns `offers: []` and null pricing fields.
+- `price_savings = max_price - min_price` — the headline "save up to X€"
+  number for the comparison page.
+- `404` if the id doesn't exist. There is no brand-scoped sugar for
+  canonicals (one canonical spans all brands by definition).
+
+---
+
 ### `GET /search?q=…`
 
 Alias of `/offers?q=…`. `q` is required.

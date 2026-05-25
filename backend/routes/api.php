@@ -1,9 +1,11 @@
 <?php
 
 use App\Http\Controllers\Api\Public\V1\BrandController as PublicBrandController;
+use App\Http\Controllers\Api\Public\V1\CanonicalProductController as PublicCanonicalProductController;
 use App\Http\Controllers\Api\Public\V1\CategoryController as PublicCategoryController;
 use App\Http\Controllers\Api\Public\V1\OfferController as PublicOfferController;
 use App\Http\Controllers\Api\V1\BrandController;
+use App\Http\Controllers\Api\V1\CanonicalProductController;
 use App\Http\Controllers\Api\V1\CrawlRunController;
 use App\Http\Controllers\Api\V1\CrawlRunOfferController;
 use Illuminate\Support\Facades\Route;
@@ -16,6 +18,12 @@ Route::prefix('v1')
         Route::post('/crawl-runs', [CrawlRunController::class, 'store']);
         Route::patch('/crawl-runs/{run}', [CrawlRunController::class, 'update']);
         Route::post('/crawl-runs/{run}/offers', [CrawlRunOfferController::class, 'store']);
+
+        // Canonicalisation: the algorithm (in crawler/) pushes groupings
+        // here after running offline. Sanctum + crawler:write ability is
+        // the same scope the offers push uses — the canonicaliser runs
+        // alongside the crawler and shares its credentials.
+        Route::post('/canonical-products/bulk-upsert', [CanonicalProductController::class, 'bulkUpsert']);
     });
 
 /*
@@ -45,4 +53,7 @@ Route::prefix('public/v1')
             ->scopeBindings();
 
         Route::get('/search', [PublicOfferController::class, 'search']);
+
+        Route::get('/canonical-products', [PublicCanonicalProductController::class, 'index']);
+        Route::get('/canonical-products/{canonicalProduct}', [PublicCanonicalProductController::class, 'show']);
     });

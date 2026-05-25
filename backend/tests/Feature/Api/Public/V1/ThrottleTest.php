@@ -13,11 +13,13 @@ class ThrottleTest extends PublicApiTestCase
         // Clear them between tests so a previous run doesn't poison this
         // one, and so this test starts with a fresh counter.
         RateLimiter::clear($this->throttleKeyForBrands());
+        RateLimiter::clear($this->throttleKeyForCanonicalProducts());
     }
 
     protected function tearDown(): void
     {
         RateLimiter::clear($this->throttleKeyForBrands());
+        RateLimiter::clear($this->throttleKeyForCanonicalProducts());
         parent::tearDown();
     }
 
@@ -34,6 +36,17 @@ class ThrottleTest extends PublicApiTestCase
         $this->getJson('/api/public/v1/brands')->assertStatus(429);
     }
 
+    public function test_canonical_products_endpoint_is_also_throttled(): void
+    {
+        // 120 are allowed.
+        for ($i = 0; $i < 120; $i++) {
+            $this->getJson('/api/public/v1/canonical-products')->assertOk();
+        }
+
+        // 121st trips the throttle.
+        $this->getJson('/api/public/v1/canonical-products')->assertStatus(429);
+    }
+
     /**
      * Mirrors the key Laravel's ThrottleRequests middleware computes for
      * a guest hitting our public route — sha1 of the route signature +
@@ -42,5 +55,10 @@ class ThrottleTest extends PublicApiTestCase
     private function throttleKeyForBrands(): string
     {
         return sha1('api/public/v1/brands|127.0.0.1');
+    }
+
+    private function throttleKeyForCanonicalProducts(): string
+    {
+        return sha1('api/public/v1/canonical-products|127.0.0.1');
     }
 }

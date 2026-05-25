@@ -18,6 +18,14 @@ class Product extends Model
         'category',
         'unit',
         'canonical_product_id',
+        'canonical_match_confidence',
+        'canonical_match_method',
+        'canonical_matched_at',
+    ];
+
+    protected $casts = [
+        'canonical_match_confidence' => 'decimal:3',
+        'canonical_matched_at' => 'datetime',
     ];
 
     public function brand(): BelongsTo
@@ -28,5 +36,10 @@ class Product extends Model
     public function offers(): HasMany
     {
         return $this->hasMany(Offer::class);
+    }
+
+    public function canonicalProduct(): BelongsTo
+    {
+        return $this->belongsTo(CanonicalProduct::class);
     }
 }
