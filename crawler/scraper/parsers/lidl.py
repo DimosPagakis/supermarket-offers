@@ -16,11 +16,26 @@ DOM because:
   * It carries machine-readable ``startDate`` / ``endDate`` which map
     cleanly to the backend's ``valid_from`` / ``valid_to`` columns.
 
-The downside is schema drift: if Lidl renames ``oldPrice`` or moves
-prices out of ``regionsPrices.<region>.futurePrices[0].price``, we
-break. That risk is mitigated by the integration test in
-``crawler/tests/test_lidl_parser.py`` which exercises this module
-against a real, committed fixture.
+Price-block shapes observed in the wild
+---------------------------------------
+A single card can expose its price under one of two siblings of
+``regionsPrices.<region>``:
+
+* ``currentPrice``: a single object — used once the promotion has
+  *started*. This is what live, in-flight offers look like.
+* ``futurePrices``: a list of objects each wrapping ``price`` — used
+  for upcoming promotions that haven't started yet.
+
+Both inner ``price`` blocks share the same field layout (``price``,
+``oldPrice``, ``discount.percentageDiscount``, ``packaging.text``,
+``startDate`` / ``endDate``, ``currencyCode`` …), so we normalise on
+the first available block. Historically only ``futurePrices`` was
+checked — that quietly dropped the entire current-week catalogue once
+the Thursday rollover flipped offers from "future" to "current"
+(observed 2026-05-25: every kw22 evdomadiaies card moved to
+``currentPrice`` and the spider's priced-offer count collapsed from
+~85 to ~27). See ``crawler/tests/test_lidl_parser.py`` for both
+shapes pinned against committed fixtures.
 """
 
 from __future__ import annotations
@@ -92,25 +107,18 @@ def _offer_from_grid_data(data: dict[str, Any], scraped_at: datetime) -> OfferIt
 
     # Region key is consistently "1" in observed fixtures, but iterate to
     # stay schema-tolerant — Lidl may expose multi-region pricing for
-    # cross-prefecture campaigns later. We pick the first region with
-    # populated futurePrices; downstream we can revisit if real
-    # multi-region data appears.
-    region_block: dict[str, Any] | None = None
+    # cross-prefecture campaigns later. We pick the first region that
+    # carries any usable price block (``currentPrice`` for live promos
+    # OR ``futurePrices`` for upcoming ones); downstream we can revisit
+    # if real multi-region data appears.
+    price_block: dict[str, Any] | None = None
     for candidate in regions_prices.values():
-        if (candidate or {}).get("futurePrices"):
-            region_block = candidate
+        block = _pick_price_block(candidate or {})
+        if block is not None:
+            price_block = block
             break
-    if region_block is None:
+    if price_block is None:
         return None
-
-    future_prices = region_block.get("futurePrices") or []
-    if not future_prices:
-        return None
-
-    # First futurePrice is the "current/next" promotion block. Lidl
-    # occasionally lists more than one when a multi-week campaign overlaps;
-    # we'd revisit if that ever surfaces real data we need.
-    price_block: dict[str, Any] = future_prices[0].get("price") or {}
     sale_price = _to_decimal(price_block.get("price"))
     if sale_price is None:
         return None
@@ -164,6 +172,36 @@ def _offer_from_grid_data(data: dict[str, Any], scraped_at: datetime) -> OfferIt
         valid_to=valid_to,
         scraped_at=scraped_at,
     )
+
+
+def _pick_price_block(region: dict[str, Any]) -> dict[str, Any] | None:
+    """Return the active price dict for a region, or None if absent.
+
+    Lidl exposes the same inner shape under two different keys depending
+    on whether the promotion is already running or scheduled:
+
+    * ``regionsPrices.<region>.currentPrice`` — single dict, live offer.
+    * ``regionsPrices.<region>.futurePrices`` — list of ``{"price": {...}}``
+      wrappers, used for upcoming offers.
+
+    We prefer ``currentPrice`` when both are present (a live offer always
+    wins over a future one for the same product), falling back to the first
+    ``futurePrices`` entry. Returns ``None`` when neither is populated —
+    that's an "online-only" / banner / RETAIL-without-promotion card and
+    must be skipped silently.
+    """
+    current = region.get("currentPrice")
+    if isinstance(current, dict) and current.get("price") is not None:
+        return current
+
+    future_prices = region.get("futurePrices") or []
+    if future_prices:
+        first = future_prices[0] or {}
+        wrapped = first.get("price")
+        if isinstance(wrapped, dict) and wrapped.get("price") is not None:
+            return wrapped
+
+    return None
 
 
 def _first_image(data: dict[str, Any]) -> str | None:
