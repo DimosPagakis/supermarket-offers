@@ -98,11 +98,21 @@ _PROMO_LABEL_MAX = 80
 
 
 def _normalise_promo_label(raw: str | None) -> str | None:
+    """Tidy a promo title for the FE pill — also localise English BOGOF
+    copy to Greek so the chip matches what the shopper sees on AB's own
+    page. AB's GraphQL ``title`` field for BXGY promotions ships in
+    English ("1 + 1 free"); the rendered storefront shows the Greek
+    "1+1 δώρο". We mirror the storefront.
+    """
     if not raw:
         return None
     cleaned = " ".join(raw.split())
     if not cleaned:
         return None
+    # Localise "N + M free" → "N+M δώρο" (compact, matches storefront).
+    bxgy_match = re.fullmatch(r"(\d+)\s*\+\s*(\d+)\s*free", cleaned, re.IGNORECASE)
+    if bxgy_match:
+        cleaned = f"{bxgy_match.group(1)}+{bxgy_match.group(2)} δώρο"
     if len(cleaned) > _PROMO_LABEL_MAX:
         cleaned = cleaned[:_PROMO_LABEL_MAX].rstrip()
     return cleaned

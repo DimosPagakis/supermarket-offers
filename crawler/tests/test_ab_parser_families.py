@@ -124,8 +124,10 @@ def test_one_plus_one_free_emits_shelf_price_with_bxgy_label() -> None:
     assert bars.discount_pct is None
     assert bars.promo_type == "bxgy_free"
     assert bars.promo_label is not None
-    # Title is "1 + 1 free" / "1 + 1 δώρο" — we keep it verbatim.
-    assert "1" in bars.promo_label and "+" in bars.promo_label
+    # AB ships English BOGOF titles ("1 + 1 free") in the GraphQL
+    # response; the storefront renders the Greek "1+1 δώρο" sticker.
+    # We localise to match the shopper-facing text.
+    assert bars.promo_label == "1+1 δώρο"
 
 
 def test_three_plus_one_free_emits_shelf_price_with_bxgy_label() -> None:
