@@ -18,25 +18,33 @@ something we can faithfully quote as a "price-comparable offer":
 
 * ``SHT_TRUE`` — ``price.showStrikethroughPrice == True``. Single-unit
   price drop. Original = ``price.value``, sale = ``discountedPriceFormatted``.
-  **Emitted.** This is the 282-offer baseline.
+  **Emitted.** This is the 282-offer baseline. ``promo_type`` is
+  ``strikethrough``; ``promo_label`` carries the brand's title
+  ("Κέρδος 15%"). One unit at the till really does cost ``price``, so
+  the legacy maths is honest.
 
 * ``BXG%_no_SHT`` — ``promotionType="Buy X Get Percentage Off All Products"``
-  *without* a strikethrough, e.g. "−30% στα 2". You only get the
-  discount when you buy ``qualifyingCount`` units; per-unit effective
-  price = ``value × (1 − pct/100)``. **Emitted** with the conditional
-  unit price as ``price``, original = ``value``. Caller-side prose may
-  want to mention "from 2 units" — the unit-count is encoded in the
-  promo title, which we keep accessible via ``unit`` when relevant.
+  *without* a strikethrough, e.g. "-30% στα 2". You only get the
+  discount when you buy ``qualifyingCount`` units; a single unit
+  scanned at the till costs ``value`` (the regular shelf price).
+  **Emitted with the shelf price as ``price``** so the card doesn't
+  lie. ``original_price`` and ``discount_pct`` are deliberately null —
+  the savings narrative lives in ``promo_label`` ("-30% στα 2") and
+  the structured ``promo_type='bxg_percent'``.
 
 * ``BXGY_FREE`` — ``promotionType="Grocery Buy X get Y free"``, e.g.
-  "1 + 1 δώρο" (qualifyingCount=2, freeCount=1). Effective per-unit
-  price = ``value × (qualifyingCount − freeCount) / qualifyingCount``.
-  **Emitted.** discount_pct = freeCount / qualifyingCount × 100.
+  "1 + 1 δώρο" (qualifyingCount=2, freeCount=1). Single-unit shelf
+  price is still ``value``; the deal only triggers at checkout when
+  the basket contains the qualifying count. **Emitted with the shelf
+  price as ``price``** (same reasoning as BXG%). ``promo_type`` is
+  ``bxgy_free`` and ``promo_label`` is the brand's title verbatim
+  ("1+1 δώρο", "2+1 δώρο", …).
 
 * ``DISCOUNT_EUROS`` — ``promotionType="Discount X Euros For Y Articles"``,
-  e.g. "−0.8€ στα 2". Effective per-unit price = ``value − (euros /
-  qualifyingCount)``. **Emitted.** discount_pct computed from the
-  resulting ratio.
+  e.g. "-0.8€ στα 2". Single-unit price = ``value``; the euro discount
+  applies once the qualifying basket lands. **Emitted with the shelf
+  price as ``price``**. ``promo_type='discount_euros'``, ``promo_label``
+  the brand's title verbatim ("-0.8€ στα 2").
 
 * ``FIXED_POINTS_THRESHOLD`` — "Spend N€ get M points". Pure loyalty
   with a basket condition; doesn't change the displayed unit price.
@@ -82,6 +90,23 @@ _DISCOUNT_PCT_RE = re.compile(r"(\d{1,3})\s*%")
 # either '.' or ',' as decimal separator.
 _DISCOUNT_EUROS_RE = re.compile(r"[-−]?\s*(\d+(?:[.,]\d+)?)\s*€")
 
+# Promo labels render on a small pill in the UI; AB occasionally returns
+# titles padded with whitespace or wrapped at 80+ chars. We tighten the
+# string and cap it to the column's max_length so the backend FormRequest
+# never trips on edge-case copy.
+_PROMO_LABEL_MAX = 80
+
+
+def _normalise_promo_label(raw: str | None) -> str | None:
+    if not raw:
+        return None
+    cleaned = " ".join(raw.split())
+    if not cleaned:
+        return None
+    if len(cleaned) > _PROMO_LABEL_MAX:
+        cleaned = cleaned[:_PROMO_LABEL_MAX].rstrip()
+    return cleaned
+
 # Match BOGOF titles like "1 + 1 free", "2 + 1 free", "3 + 1 δώρο".
 # Captures paid-count then free-count. AB localises the "free" word
 # ("free" / "δώρο"), so we just match the structural "N + M ...".
@@ -111,6 +136,16 @@ FAMILY_UNKNOWN = "UNKNOWN"
 EMITTED_FAMILIES = frozenset(
     {FAMILY_SHT, FAMILY_BXG_PCT, FAMILY_BXGY_FREE, FAMILY_DISCOUNT_EUROS}
 )
+
+# Internal family code → canonical backend promo_type enum value. The
+# backend's Offer::PROMO_TYPES enum is the source of truth; keep this
+# mapping in sync if either side adds a family.
+_FAMILY_TO_PROMO_TYPE: dict[str, str] = {
+    FAMILY_SHT: "strikethrough",
+    FAMILY_BXG_PCT: "bxg_percent",
+    FAMILY_BXGY_FREE: "bxgy_free",
+    FAMILY_DISCOUNT_EUROS: "discount_euros",
+}
 
 
 def extract_offers_from_payload(
@@ -248,7 +283,15 @@ _AB_PROMO_PRIORITY: tuple[tuple[str, str], ...] = (
 def _build_sht_offer(
     product: dict[str, Any], scraped_at: datetime
 ) -> OfferItem | None:
-    """Real single-unit price drop (legacy / pre-2026-05-25 behaviour)."""
+    """Real single-unit price drop (legacy / pre-2026-05-25 behaviour).
+
+    SHT is the one family where the maths is honest: one unit at the till
+    really costs ``discountedPriceFormatted``. We keep the existing
+    ``price`` / ``original_price`` / ``discount_pct`` semantics and merely
+    enrich the row with the new ``promo_label`` / ``promo_type`` fields
+    so the UI can prefer the brand's verbatim copy ("Κέρδος 15%") over
+    our reconstructed "-15%" pill.
+    """
     price_block = product.get("price") or {}
 
     sale_price = _parse_formatted_price(price_block.get("discountedPriceFormatted"))
@@ -268,16 +311,20 @@ def _build_sht_offer(
     discount_pct: int | None = None
     valid_from: date | None = None
     valid_to: date | None = None
+    promo_label: str | None = None
     if promo is not None:
         discount_pct = _extract_discount_pct(promo, original_price, sale_price)
         valid_from = _promo_date(promo.get("startDate"))
         valid_to = _promo_date(promo.get("endDate"))
+        promo_label = _normalise_promo_label(promo.get("title"))
 
     return _finalise_offer(
         product=product,
         sale_price=sale_price,
         original_price=original_price,
         discount_pct=discount_pct,
+        promo_label=promo_label,
+        promo_type=_FAMILY_TO_PROMO_TYPE[FAMILY_SHT],
         valid_from=valid_from,
         valid_to=valid_to,
         scraped_at=scraped_at,
@@ -289,32 +336,34 @@ def _build_bxg_percent_offer(
     promo: dict[str, Any] | None,
     scraped_at: datetime,
 ) -> OfferItem | None:
-    """Multi-buy / single-buy % off without strikethrough, e.g. "−30% στα 2".
+    """Multi-buy / single-buy % off without strikethrough, e.g. "-30% στα 2".
 
-    Effective per-unit price = original × (1 − pct/100). We always quote
-    the conditional unit price because that's the lowest price the
-    shopper can actually pay for this product right now; multi-buy
-    qualifying counts are noted in the promo title.
+    A single unit at the till still costs ``value`` — the % only kicks in
+    when the basket contains the qualifying count. We therefore emit the
+    regular shelf price as ``price`` and let ``promo_label`` carry the
+    "-30% στα 2" copy. Quoting the conditional per-unit effective price
+    here would tell the shopper "€1.50" when the website's sticker says
+    "€2.14"; the small honesty win matters more than the headline saving.
     """
     price_block = product.get("price") or {}
-    original_price = to_decimal(price_block.get("value"))
-    if original_price is None or promo is None:
+    shelf_price = to_decimal(price_block.get("value"))
+    if shelf_price is None or shelf_price <= 0 or promo is None:
         return None
 
-    pct = _extract_discount_pct(promo, original_price, original_price)
+    # Sanity gate: a "-0% off" or unparseable promo isn't a real offer.
+    # We don't surface the pct value (the multi-buy maths is the
+    # consumer's job) but we still drop the row if the promo is bogus.
+    pct = _extract_discount_pct(promo, shelf_price, shelf_price)
     if pct is None or pct <= 0:
-        return None
-
-    factor = (Decimal(100) - Decimal(pct)) / Decimal(100)
-    sale_price = (original_price * factor).quantize(Decimal("0.01"))
-    if sale_price <= 0 or sale_price >= original_price:
         return None
 
     return _finalise_offer(
         product=product,
-        sale_price=sale_price,
-        original_price=original_price,
-        discount_pct=int(pct),
+        sale_price=shelf_price,
+        original_price=None,
+        discount_pct=None,
+        promo_label=_normalise_promo_label(promo.get("title")),
+        promo_type=_FAMILY_TO_PROMO_TYPE[FAMILY_BXG_PCT],
         valid_from=_promo_date(promo.get("startDate")),
         valid_to=_promo_date(promo.get("endDate")),
         scraped_at=scraped_at,
@@ -326,33 +375,33 @@ def _build_bxgy_free_offer(
     promo: dict[str, Any] | None,
     scraped_at: datetime,
 ) -> OfferItem | None:
-    """BOGOF / 2+1: per-unit effective price = value × (paid)/(paid+free).
+    """BOGOF / 2+1: emit the regular shelf price + a "1+1 δώρο" label.
 
     AB encodes the deal as ``qualifyingCount = paid+free`` and
-    ``freeCount = free``. So "1+1 free" → qualifyingCount=2, freeCount=1.
-    Effective ratio = (qualifyingCount − freeCount) / qualifyingCount.
+    ``freeCount = free``. We still parse the (paid, free) counts as a
+    sanity gate — a malformed promo (zero free units, missing title)
+    should not yield a phantom offer — but we no longer divide the
+    shelf price by the ratio. The shopper sees ``value`` on the brand's
+    page; we mirror that. The savings narrative lives in ``promo_label``.
     """
     if promo is None:
         return None
     price_block = product.get("price") or {}
-    original_price = to_decimal(price_block.get("value"))
-    if original_price is None or original_price <= 0:
+    shelf_price = to_decimal(price_block.get("value"))
+    if shelf_price is None or shelf_price <= 0:
         return None
 
     paid, free = _parse_bxgy_counts(promo)
     if paid is None or free is None:
         return None
-    qualifying = paid + free
-    sale_price = (original_price * Decimal(paid) / Decimal(qualifying)).quantize(Decimal("0.01"))
-    if sale_price <= 0 or sale_price >= original_price:
-        return None
 
-    discount_pct = int(round(Decimal(free) / Decimal(qualifying) * Decimal(100)))
     return _finalise_offer(
         product=product,
-        sale_price=sale_price,
-        original_price=original_price,
-        discount_pct=discount_pct,
+        sale_price=shelf_price,
+        original_price=None,
+        discount_pct=None,
+        promo_label=_normalise_promo_label(promo.get("title")),
+        promo_type=_FAMILY_TO_PROMO_TYPE[FAMILY_BXGY_FREE],
         valid_from=_promo_date(promo.get("startDate")),
         valid_to=_promo_date(promo.get("endDate")),
         scraped_at=scraped_at,
@@ -366,15 +415,17 @@ def _build_discount_euros_offer(
 ) -> OfferItem | None:
     """Multi-buy euro discount, e.g. "-0.8€ στα 2".
 
-    Per-unit effective price = original − (euros / qualifyingCount).
-    The euro amount is encoded in the title / simplePromotionMessage,
-    not as a structured field.
+    Same honesty argument as BXG% / BXGY: a single-unit scan rings up at
+    ``value``; the euro discount only applies once the qualifying basket
+    is at the till. We emit the shelf price and let ``promo_label`` do
+    the talking. The euro amount + qualifying count are still parsed as
+    a sanity gate so a malformed promo doesn't sneak through.
     """
     if promo is None:
         return None
     price_block = product.get("price") or {}
-    original_price = to_decimal(price_block.get("value"))
-    if original_price is None or original_price <= 0:
+    shelf_price = to_decimal(price_block.get("value"))
+    if shelf_price is None or shelf_price <= 0:
         return None
 
     qualifying = promo.get("qualifyingCount") or 1
@@ -385,20 +436,13 @@ def _build_discount_euros_offer(
     if euros_off is None or euros_off <= 0:
         return None
 
-    per_unit_off = euros_off / Decimal(qualifying)
-    sale_price = (original_price - per_unit_off).quantize(Decimal("0.01"))
-    if sale_price <= 0 or sale_price >= original_price:
-        return None
-
-    discount_pct = int(round((original_price - sale_price) / original_price * Decimal(100)))
-    if not 0 < discount_pct <= 100:
-        discount_pct = None  # type: ignore[assignment]
-
     return _finalise_offer(
         product=product,
-        sale_price=sale_price,
-        original_price=original_price,
-        discount_pct=discount_pct,
+        sale_price=shelf_price,
+        original_price=None,
+        discount_pct=None,
+        promo_label=_normalise_promo_label(promo.get("title")),
+        promo_type=_FAMILY_TO_PROMO_TYPE[FAMILY_DISCOUNT_EUROS],
         valid_from=_promo_date(promo.get("startDate")),
         valid_to=_promo_date(promo.get("endDate")),
         scraped_at=scraped_at,
@@ -411,6 +455,8 @@ def _finalise_offer(
     sale_price: Decimal,
     original_price: Decimal | None,
     discount_pct: int | None,
+    promo_label: str | None = None,
+    promo_type: str | None = None,
     valid_from: date | None,
     valid_to: date | None,
     scraped_at: datetime,
@@ -447,6 +493,8 @@ def _finalise_offer(
         price=sale_price,
         original_price=original_price,
         discount_pct=discount_pct,
+        promo_label=promo_label,
+        promo_type=promo_type,
         currency=price_block.get("currencyIso") or "EUR",
         valid_from=valid_from,
         valid_to=valid_to,

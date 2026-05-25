@@ -131,6 +131,18 @@ def _offer_from_grid_data(data: dict[str, Any], scraped_at: datetime) -> OfferIt
     discount_pct_raw = discount_block.get("percentageDiscount")
     discount_pct = _to_int_in_range(discount_pct_raw, lo=0, hi=100)
 
+    # Lidl's data-grid-data exposes single-unit % discounts only — no
+    # BOGOF / multi-buy metadata. When a discount exists we synthesise
+    # a short label ("−15%") and tag the row as `strikethrough` so the
+    # frontend renders the new promo pill on the same code path AB uses;
+    # otherwise both fields stay null and the legacy "no badge" rendering
+    # applies.
+    promo_label: str | None = None
+    promo_type: str | None = None
+    if discount_pct is not None and discount_pct > 0:
+        promo_label = f"−{discount_pct}%"
+        promo_type = "strikethrough"
+
     title = (data.get("title") or "").strip() or None
     if not title:
         # No human-readable name means we can't dedupe / match downstream.
@@ -168,6 +180,8 @@ def _offer_from_grid_data(data: dict[str, Any], scraped_at: datetime) -> OfferIt
         price=sale_price,
         original_price=original_price,
         discount_pct=discount_pct,
+        promo_label=promo_label,
+        promo_type=promo_type,
         currency=price_block.get("currencyCode") or "EUR",
         valid_from=valid_from,
         valid_to=valid_to,

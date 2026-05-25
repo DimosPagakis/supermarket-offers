@@ -76,7 +76,19 @@ def _offer_from_product(
     if original_price is not None and original_price <= sale_price:
         original_price = None
 
-    discount_pct = _parse_discount_pct(product.get("Discount"))
+    discount_raw = product.get("Discount")
+    discount_pct = _parse_discount_pct(discount_raw)
+
+    # Masoutis only ships single-unit strikethrough deals (no multi-buy
+    # metadata). Surface the brand's own ``Discount`` string verbatim
+    # as the badge label ("-45%") and tag the row as `strikethrough` —
+    # same code path Lidl uses — when a usable percent value parsed.
+    promo_label: str | None = None
+    promo_type: str | None = None
+    if discount_pct is not None and discount_pct > 0:
+        cleaned = " ".join(str(discount_raw).split()) if discount_raw else ""
+        promo_label = cleaned[:80] if cleaned else f"-{discount_pct}%"
+        promo_type = "strikethrough"
 
     name = (product.get("ItemDescr") or "").strip() or None
     if not name:
@@ -129,6 +141,8 @@ def _offer_from_product(
         price=sale_price,
         original_price=original_price,
         discount_pct=discount_pct,
+        promo_label=promo_label,
+        promo_type=promo_type,
         currency="EUR",
         valid_from=None,
         valid_to=None,

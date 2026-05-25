@@ -47,6 +47,12 @@ def test_first_offer_field_mapping() -> None:
     # Discount "-45%" → discount_pct=45.
     assert offer.discount_pct == 45
 
+    # Masoutis is single-unit strikethrough — the raw "Discount" string
+    # surfaces verbatim as the promo label and the structured kind is
+    # `strikethrough`.
+    assert offer.promo_type == "strikethrough"
+    assert offer.promo_label == "-45%"
+
     # Currency is hardcoded EUR — Masoutis doesn't expose it per-row.
     assert offer.currency == "EUR"
 
@@ -72,6 +78,8 @@ def test_payload_round_trip_matches_backend_contract() -> None:
     assert payload["price"] == 4.83
     assert payload["original_price"] == 8.78
     assert payload["discount_pct"] == 45
+    assert payload["promo_label"] == "-45%"
+    assert payload["promo_type"] == "strikethrough"
     # Dates are null in the API; payload should reflect that.
     assert payload["valid_from"] is None
     assert payload["valid_to"] is None
