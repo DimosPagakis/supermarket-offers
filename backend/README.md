@@ -1,3 +1,27 @@
+# Supermarket Offers — Backend
+
+Laravel 13 + SQLite backend for the Greek supermarket offer aggregator.
+
+## API
+
+The crawler talks to this backend over a versioned REST API at `/api/v1/*`.
+All endpoints are Sanctum-protected and require a token with the
+`crawler:write` ability.
+
+Full endpoint reference with curl examples: [`docs/api.md`](docs/api.md).
+
+### Issuing a crawler token
+
+```bash
+php artisan crawler:token <label>
+```
+
+This creates (or reuses) a dedicated system user `crawler@system.local` and
+prints a fresh personal access token. The token is shown once; store it
+wherever the crawler reads its config.
+
+---
+
 <p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
 
 <p align="center">
