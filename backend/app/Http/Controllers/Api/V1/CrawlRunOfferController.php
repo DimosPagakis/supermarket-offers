@@ -2,77 +2,48 @@
 
 namespace App\Http\Controllers\Api\V1;
 
+use App\Domain\Offer\IngestOffers;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\StoreOffersRequest;
 use App\Http\Resources\OfferBulkResultResource;
 use App\Models\CrawlRun;
-use App\Models\Offer;
-use App\Services\ProductResolver;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Throwable;
 
 class CrawlRunOfferController extends Controller
 {
-    public function __construct(private readonly ProductResolver $resolver) {}
+    public function __construct(private readonly IngestOffers $ingest) {}
 
     /**
      * POST /api/v1/crawl-runs/{run}/offers
      *
-     * Bulk-push scraped offers. Upserts products implicitly (by external_id
-     * or normalized_name) and creates one Offer row per item linked to the
-     * run. All-or-nothing transaction — if anything throws mid-batch the
-     * entire batch rolls back so the crawler can safely retry.
+     * Pure HTTP shell: validate, delegate to the action (which owns
+     * the transaction + product resolution + offer persistence), and
+     * wrap the outcome in the standard JSON envelope. The
+     * all-or-nothing rollback and the idempotent product-matching
+     * contract live in {@see IngestOffers}.
      *
-     * The run's final status is NOT mutated here. The crawler owns lifecycle
-     * transitions via PATCH /crawl-runs/{run}; this endpoint stays a pure
-     * idempotent data sink. A 5xx response signals the crawler to retry the
-     * batch or mark the run failed on its own.
+     * The run's final status is NOT mutated here. The crawler owns
+     * lifecycle transitions via PATCH /crawl-runs/{run}; this
+     * endpoint stays a pure idempotent data sink. Any uncaught
+     * Throwable from the action means the transaction already rolled
+     * back; we surface a structured 500 with a "Safe to retry" hint
+     * so the crawler can replay the same batch.
      */
     public function store(StoreOffersRequest $request, CrawlRun $run): JsonResponse
     {
         $payload = $request->validated();
-        $brandId = (int) $run->brand_id;
-
-        $persisted = 0;
-        $created = 0;
-        $updated = 0;
 
         try {
-            DB::transaction(function () use ($payload, $run, $brandId, &$persisted, &$created, &$updated) {
-                foreach ($payload['offers'] as $item) {
-                    $result = $this->resolver->resolve($brandId, $item);
-
-                    if ($result['created']) {
-                        $created++;
-                    } elseif ($result['updated']) {
-                        $updated++;
-                    }
-
-                    Offer::create([
-                        'product_id' => $result['product']->id,
-                        'crawl_run_id' => $run->id,
-                        'price' => $item['price'],
-                        'original_price' => $item['original_price'] ?? null,
-                        'discount_pct' => $item['discount_pct'] ?? null,
-                        'currency' => $item['currency'] ?? 'EUR',
-                        'valid_from' => $item['valid_from'] ?? null,
-                        'valid_to' => $item['valid_to'] ?? null,
-                        'scraped_at' => $item['scraped_at'],
-                    ]);
-
-                    $persisted++;
-                }
-            });
+            $result = ($this->ingest)($run, $payload['offers']);
         } catch (Throwable $e) {
-            // Transaction is already rolled back by Laravel — nothing was
-            // persisted from this batch. Log with enough context to debug
-            // (run, brand, batch size, exception class) without leaking
-            // payload bodies into logs.
+            // Transaction is already rolled back by the action — nothing
+            // was persisted from this batch. Log with enough context to
+            // debug without leaking payload bodies into logs.
             Log::error('Offer bulk push failed', [
                 'run_id' => $run->id,
-                'brand_id' => $brandId,
+                'brand_id' => (int) $run->brand_id,
                 'batch_size' => count($payload['offers']),
                 'exception' => $e::class,
                 'message' => $e->getMessage(),
@@ -85,9 +56,9 @@ class CrawlRunOfferController extends Controller
         }
 
         return (new OfferBulkResultResource([
-            'persisted' => $persisted,
-            'products_created' => $created,
-            'products_updated' => $updated,
+            'persisted' => $result->persisted,
+            'products_created' => $result->productsCreated,
+            'products_updated' => $result->productsUpdated,
         ]))->response()->setStatusCode(201);
     }
 }
