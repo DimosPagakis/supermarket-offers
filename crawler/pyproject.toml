@@ -27,13 +27,24 @@ dev = [
     "ruff>=0.4",
     "mypy>=1.10",
 ]
+# Phase-1 canonicalisation embedding fallback. The rule-based matcher
+# in scraper.canonical.matcher works without these; install only when
+# running the embedding refinement pass.
+canonical-embeddings = [
+    "sentence-transformers>=2.7,<3.0",
+]
 
 [build-system]
 requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
-packages = ["scraper", "scraper.clients", "scraper.spiders"]
+packages = [
+    "scraper",
+    "scraper.canonical",
+    "scraper.clients",
+    "scraper.spiders",
+]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

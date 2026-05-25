@@ -126,3 +126,25 @@ docker run --rm --env-file .env supermarket-offers-crawler
 ```
 
 Default command runs `scrapy crawl lidl`.
+
+## Product canonicalisation (Phase 1)
+
+A pure-algorithm package under `scraper/canonical/` groups equivalent
+products across chains. See `docs/canonicalisation-design.md` for the
+full design.
+
+```bash
+# Dry-run — print stats + sample groupings + first payload as JSON.
+python -m scripts.canonicalise --dry-run
+
+# Push groupings to the backend (needs Sanctum token with
+# `crawler:write` ability).
+BACKEND_TOKEN=... python -m scripts.canonicalise \
+    --backend-url http://127.0.0.1:8001/api/v1 \
+    --min-confidence 0.85
+```
+
+Tests for the canonicalisation pipeline live under `tests/canonical/`.
+The embedding fallback in `scraper.canonical.embedding_matcher` is lazy
+— install `pip install -e ".[canonical-embeddings]"` only when running
+the refinement pass.
