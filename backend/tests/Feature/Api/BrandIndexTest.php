@@ -18,7 +18,10 @@ class BrandIndexTest extends ApiTestCase
 
         $response = $this->getJson('/api/v1/brands')->assertOk();
 
-        $response->assertJsonCount(5, 'data');
+        // The seeder defines 5 brands but Sklavenitis is shipped with
+        // active=false (Akamai bot guard, see BrandSeeder for the why).
+        // /api/v1/brands filters to active brands → 4 expected.
+        $response->assertJsonCount(4, 'data');
 
         $first = $response->json('data.0');
         $this->assertArrayHasKey('id', $first);
@@ -30,18 +33,26 @@ class BrandIndexTest extends ApiTestCase
         $this->assertArrayHasKey('rate_limit_ms', $first['crawl_config']);
         $this->assertArrayHasKey('respect_robots_txt', $first['crawl_config']);
         $this->assertArrayHasKey('cache_ttl_seconds', $first['crawl_config']);
+
+        // Sklavenitis must not surface even though it's in the seeder.
+        $slugs = array_column($response->json('data'), 'slug');
+        $this->assertNotContains('sklavenitis', $slugs);
     }
 
     public function test_inactive_brands_are_excluded(): void
     {
         $this->seed(BrandSeeder::class);
+        // Sklavenitis is already inactive from the seeder; flip lidl too
+        // to prove the filter handles dynamic deactivation as well as the
+        // seed-time default.
         \App\Models\Brand::query()->where('slug', 'lidl')->update(['active' => false]);
 
         $this->authedAsCrawler();
 
         $response = $this->getJson('/api/v1/brands')->assertOk();
-        $response->assertJsonCount(4, 'data');
+        $response->assertJsonCount(3, 'data');
         $slugs = array_column($response->json('data'), 'slug');
         $this->assertNotContains('lidl', $slugs);
+        $this->assertNotContains('sklavenitis', $slugs);
     }
 }

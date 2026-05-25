@@ -25,9 +25,15 @@ class BrandSeeder extends Seeder
                 'name' => 'Sklavenitis',
                 'slug' => 'sklavenitis',
                 'website_url' => 'https://www.sklavenitis.gr',
-                // Bot-protected on plain HTTP fetches — use Playwright with realistic UA.
+                // Sklavenitis sits behind Akamai Bot Manager (errors.edgesuite.net).
+                // Even headless Chromium with stealth flags + realistic UA gets
+                // 403 "Access Denied" on every page. Bypassing that requires
+                // residential proxies and TLS-fingerprint impersonation — out
+                // of scope for the MVP. Marking inactive so spider runs skip
+                // this brand. Revisit when we have proxy budget.
                 'start_url' => 'https://www.sklavenitis.gr/sylloges/prosfores',
                 'strategy' => 'playwright',
+                'active' => false,
             ],
             [
                 'name' => 'Lidl Hellas',
@@ -65,7 +71,10 @@ class BrandSeeder extends Seeder
                     'name' => $data['name'],
                     'website_url' => $data['website_url'],
                     'country_code' => 'GR',
-                    'active' => true,
+                    // Per-brand override; defaults active unless the
+                    // entry explicitly sets `active => false` (e.g.
+                    // Sklavenitis — see comment above).
+                    'active' => $data['active'] ?? true,
                 ],
             );
 
