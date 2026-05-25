@@ -7,21 +7,20 @@ captured 2026-05-25 from
 
 from __future__ import annotations
 
-from datetime import datetime, UTC
 from decimal import Decimal
-from pathlib import Path
 
 from scraper.items import OfferItem
-from scraper.parsers.masoutis import extract_offers, extract_offers_from_payload
+from scraper.parsers.masoutis import extract_offers_from_payload
 
-FIXTURE = (
-    Path(__file__).parent / "fixtures" / "masoutis" / "promoitem-page0.json"
+from ._fixtures import (
+    SCRAPED_AT,
+    assert_payload_matches_backend_contract,
+    load_offers,
 )
-SCRAPED_AT = datetime(2026, 5, 25, 12, 0, 0, tzinfo=UTC)
 
 
 def _load_offers() -> list[OfferItem]:
-    return list(extract_offers(FIXTURE.read_text(encoding="utf-8"), SCRAPED_AT))
+    return load_offers("masoutis", "promoitem-page0.json")
 
 
 def test_extracts_all_priced_offers() -> None:
@@ -68,23 +67,7 @@ def test_first_offer_field_mapping() -> None:
 
 def test_payload_round_trip_matches_backend_contract() -> None:
     offer = _load_offers()[0]
-    payload = offer.to_payload()
-    for key in (
-        "external_id",
-        "name",
-        "url",
-        "image_url",
-        "category",
-        "unit",
-        "price",
-        "original_price",
-        "discount_pct",
-        "currency",
-        "valid_from",
-        "valid_to",
-        "scraped_at",
-    ):
-        assert key in payload, f"missing key in offer payload: {key}"
+    payload = assert_payload_matches_backend_contract(offer)
 
     assert payload["price"] == 4.83
     assert payload["original_price"] == 8.78

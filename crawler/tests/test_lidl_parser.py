@@ -12,28 +12,26 @@ loudly and we tune the parser before shipping.
 
 from __future__ import annotations
 
-from datetime import date, datetime, UTC
+from datetime import date
 from decimal import Decimal
-from pathlib import Path
 
 from scraper.items import OfferItem
-from scraper.parsers.lidl import extract_offers
 
-FIXTURE = Path(__file__).parent / "fixtures" / "lidl" / "listing.html"
-# Second fixture captured live on 2026-05-25 from the same campaign URL
-# (``/c/evdomadiaies-epiloges-26kw22/a10095458``) *after* Lidl flipped the
-# active offers from ``futurePrices`` to ``currentPrice``. Both fixtures
-# must parse — see ``_pick_price_block`` in scraper/parsers/lidl.py.
-FIXTURE_CURRENT = Path(__file__).parent / "fixtures" / "lidl" / "listing_current.html"
-SCRAPED_AT = datetime(2026, 5, 25, 12, 0, 0, tzinfo=UTC)
+from ._fixtures import assert_payload_matches_backend_contract, load_offers
+
+# The "current" fixture was captured live on 2026-05-25 from the same
+# campaign URL (``/c/evdomadiaies-epiloges-26kw22/a10095458``) *after*
+# Lidl flipped the active offers from ``futurePrices`` to ``currentPrice``.
+# Both fixtures must parse — see ``_pick_price_block`` in
+# scraper/parsers/lidl.py.
 
 
 def _load_offers() -> list[OfferItem]:
-    return list(extract_offers(FIXTURE.read_text(encoding="utf-8"), SCRAPED_AT))
+    return load_offers("lidl", "listing.html")
 
 
 def _load_offers_current() -> list[OfferItem]:
-    return list(extract_offers(FIXTURE_CURRENT.read_text(encoding="utf-8"), SCRAPED_AT))
+    return load_offers("lidl", "listing_current.html")
 
 
 def test_extracts_priced_offers_only() -> None:
@@ -111,25 +109,7 @@ def test_payload_is_backend_contract_shaped() -> None:
     POST /api/v1/crawl-runs/{run}/offers stays exercised end-to-end in
     the parser test, not just the API client unit test."""
     offers = _load_offers()
-    payload = offers[0].to_payload()
-
-    # Keys that the FormRequest on the backend side validates against.
-    for key in (
-        "external_id",
-        "name",
-        "url",
-        "image_url",
-        "category",
-        "unit",
-        "price",
-        "original_price",
-        "discount_pct",
-        "currency",
-        "valid_from",
-        "valid_to",
-        "scraped_at",
-    ):
-        assert key in payload, f"missing key in offer payload: {key}"
+    payload = assert_payload_matches_backend_contract(offers[0])
 
     # Numeric fields are serialized as JSON-friendly floats / ints.
     assert isinstance(payload["price"], float)

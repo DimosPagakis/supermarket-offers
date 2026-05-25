@@ -6,21 +6,23 @@ Run against a committed snapshot of page 1 of ``/offers`` captured
 
 from __future__ import annotations
 
-from datetime import datetime, UTC
 from decimal import Decimal
-from pathlib import Path
 
 from scraper.items import OfferItem
 from scraper.parsers.mymarket import extract_offers, extract_total_pages
 
-FIXTURE = (
-    Path(__file__).parent / "fixtures" / "mymarket" / "listing-page1.html"
+from ._fixtures import (
+    SCRAPED_AT,
+    assert_payload_matches_backend_contract,
+    fixture_path,
+    load_offers,
 )
-SCRAPED_AT = datetime(2026, 5, 25, 12, 0, 0, tzinfo=UTC)
+
+FIXTURE = fixture_path("my-market", "listing-page1.html")
 
 
 def _load_offers() -> list[OfferItem]:
-    return list(extract_offers(FIXTURE.read_text(encoding="utf-8"), SCRAPED_AT))
+    return load_offers("my-market", "listing-page1.html")
 
 
 def test_extracts_one_offer_per_card() -> None:
@@ -68,23 +70,7 @@ def test_offers_dedupe_within_page() -> None:
 
 def test_payload_round_trip_matches_backend_contract() -> None:
     offer = _load_offers()[0]
-    payload = offer.to_payload()
-    for key in (
-        "external_id",
-        "name",
-        "url",
-        "image_url",
-        "category",
-        "unit",
-        "price",
-        "original_price",
-        "discount_pct",
-        "currency",
-        "valid_from",
-        "valid_to",
-        "scraped_at",
-    ):
-        assert key in payload
+    payload = assert_payload_matches_backend_contract(offer)
     assert payload["price"] == 0.72
     assert payload["original_price"] is None
     assert payload["discount_pct"] is None
