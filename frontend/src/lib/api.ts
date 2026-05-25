@@ -9,7 +9,9 @@
 
 import type {
   Brand,
-  Offer,
+  CanonicalProductDetail,
+  CanonicalProductsPage,
+  CanonicalQuery,
   OfferQuery,
   OfferWithHistory,
   OffersPage,
@@ -24,9 +26,11 @@ const API_PREFIX = "/api/public/v1";
 const OFFERS_TAG = "offers";
 const BRANDS_TAG = "brands";
 const CATEGORIES_TAG = "categories";
+const CANONICAL_TAG = "canonical-products";
 
 const REVALIDATE_OFFERS = 60 * 5; // 5 min
 const REVALIDATE_REFERENCE = 60 * 60; // 1 hour for brands + categories
+const REVALIDATE_CANONICAL = 60 * 5; // 5 min — comparison data tracks offers
 
 export function buildOfferQueryString(params: OfferQuery): string {
   const sp = new URLSearchParams();
@@ -132,5 +136,56 @@ export async function searchOffers(q: string): Promise<OffersPage> {
   return fetchOffers({ q });
 }
 
+// ---------------------------------------------------------------------------
+// Canonical product comparison
+// ---------------------------------------------------------------------------
+
+export function buildCanonicalQueryString(params: CanonicalQuery): string {
+  const sp = new URLSearchParams();
+  if (params.q) sp.set("q", params.q);
+  if (params.brand?.length) sp.set("brand", params.brand.join(","));
+  if (params.category) sp.set("category", params.category);
+  if (typeof params.min_brands === "number")
+    sp.set("min_brands", String(params.min_brands));
+  if (params.sort) sp.set("sort", params.sort);
+  if (params.dir) sp.set("dir", params.dir);
+  if (params.page) sp.set("page", String(params.page));
+  if (params.per_page) sp.set("per_page", String(params.per_page));
+  const s = sp.toString();
+  return s ? `?${s}` : "";
+}
+
+export async function fetchCanonicalProducts(
+  params: CanonicalQuery = {},
+): Promise<CanonicalProductsPage> {
+  if (isMocksEnabled()) return mockApi.canonicalProducts(params);
+  const qs = buildCanonicalQueryString(params);
+  return apiFetch<CanonicalProductsPage>(`/canonical-products${qs}`, {
+    tag: CANONICAL_TAG,
+    revalidate: REVALIDATE_CANONICAL,
+  });
+}
+
+export async function fetchCanonicalProduct(
+  id: number,
+): Promise<CanonicalProductDetail> {
+  if (isMocksEnabled()) return mockApi.canonicalProduct(id);
+  const json = await apiFetch<{ data: CanonicalProductDetail }>(
+    `/canonical-products/${id}`,
+    { tag: CANONICAL_TAG, revalidate: REVALIDATE_CANONICAL },
+  );
+  return json.data;
+}
+
 // Re-export so callers can keep imports tidy.
-export type { Brand, Offer, OfferQuery, OfferWithHistory, OffersPage };
+export type {
+  Brand,
+  CanonicalProductDetail,
+  CanonicalProductSummary,
+  CanonicalProductsPage,
+  CanonicalQuery,
+  Offer,
+  OfferQuery,
+  OfferWithHistory,
+  OffersPage,
+} from "./types";

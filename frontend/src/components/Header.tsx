@@ -15,6 +15,9 @@ export function Header() {
             <Link href="/offers" className="hover:text-emerald-600">
               Όλες οι προσφορές
             </Link>
+            <Link href="/compare" className="hover:text-emerald-600">
+              Σύγκριση
+            </Link>
             <Link href="/about" className="hover:text-emerald-600">
               Σχετικά
             </Link>
