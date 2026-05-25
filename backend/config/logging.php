@@ -123,6 +123,13 @@ return [
             'handler' => NullHandler::class,
         ],
 
+        'scheduler' => [
+            'driver' => 'single',
+            'path' => storage_path('logs/scheduler.log'),
+            'level' => env('LOG_LEVEL', 'debug'),
+            'replace_placeholders' => true,
+        ],
+
         'emergency' => [
             'path' => storage_path('logs/laravel.log'),
         ],
