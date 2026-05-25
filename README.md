@@ -25,7 +25,8 @@ Two services, clean separation. Crawler is dumb (fetch + parse + ship). Backend 
 ```
 supermarket-offers/
 ├── backend/    Laravel 12 API + scheduler (PHP 8.3+)
-└── crawler/    Python Scrapy spiders (coming soon)
+├── crawler/    Python Scrapy spiders (coming soon)
+└── frontend/   Next.js 16 (App Router) + Tailwind v4 — public site + API consumer
 ```
 
 ## Data model (5 tables)
