@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
-import { useCallback, useMemo, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useRef, useTransition } from "react";
 import { brandColour } from "@/lib/brand-colours";
 import type { Brand, CanonicalSortField } from "@/lib/types";
 
@@ -58,24 +58,46 @@ export function CanonicalFiltersBar({
   const selectedSort =
     (searchParams.get("sort") as CanonicalSortField | null) ?? "brands_count";
 
-  const [minBrandsLocal, setMinBrandsLocal] = useState(minBrands);
+  // Derive the active min-brands value directly from the URL so the pill
+  // selection stays in sync with browser back/forward navigation. The
+  // previous local-state mirror would drift out of date on history pops.
   const activeCount =
     (selectedBrands.size > 0 ? 1 : 0) +
     (selectedCategory ? 1 : 0) +
     (minBrands > 2 ? 1 : 0) +
     (selectedSort !== "brands_count" ? 1 : 0);
 
+  // Track the last URL we *intended* to navigate to, regardless of whether
+  // the router has finished committing it. Rapid clicks (e.g. brand chip +
+  // min-brands pill, fired in the same tick) must compose: each handler
+  // needs to see the *pending* URL, not the one in `searchParams` (held by
+  // React's transition snapshot) nor the one in `window.location` (which
+  // the router updates asynchronously after the transition commits).
+  const pendingSearchRef = useRef<string>(`?${searchParams.toString()}`);
+  useEffect(() => {
+    // Re-sync whenever the URL changes for *any* reason — back/forward,
+    // page navigation, programmatic update from elsewhere.
+    pendingSearchRef.current = `?${searchParams.toString()}`;
+  }, [searchParams]);
+
   const updateParam = useCallback(
     (mutate: (sp: URLSearchParams) => void) => {
-      const sp = new URLSearchParams(searchParams.toString());
+      const sp = new URLSearchParams(pendingSearchRef.current);
       mutate(sp);
       sp.delete("page");
       const qs = sp.toString();
+      // Commit to the ref *synchronously* so the very next click in the
+      // same tick reads this URL as its base, instead of clobbering it.
+      pendingSearchRef.current = qs ? `?${qs}` : "";
       startTransition(() => {
-        router.replace(qs ? `${pathname}?${qs}` : pathname);
+        // `push` (not `replace`) so browser back/forward step through the
+        // filter history. `scroll: false` keeps the user anchored to the
+        // grid — without it Next would jump the viewport to the top on
+        // every filter change and the bar would appear unresponsive.
+        router.push(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
       });
     },
-    [router, pathname, searchParams],
+    [router, pathname],
   );
 
   const onToggleBrand = (slug: string) =>
@@ -92,7 +114,6 @@ export function CanonicalFiltersBar({
     });
 
   const onChangeMinBrands = (value: number) => {
-    setMinBrandsLocal(value);
     updateParam((sp) => {
       if (value > 2) sp.set("min_brands", String(value));
       else sp.delete("min_brands");
@@ -110,10 +131,12 @@ export function CanonicalFiltersBar({
   const onReset = () => {
     updateParam((sp) => {
       const q = sp.get("q");
-      sp.forEach((_, key) => sp.delete(key));
+      // Collect keys first — `URLSearchParams.forEach` + `delete` mutate
+      // the underlying list mid-iteration and skip entries.
+      const keys = Array.from(sp.keys());
+      for (const key of keys) sp.delete(key);
       if (q) sp.set("q", q);
     });
-    setMinBrandsLocal(2);
   };
 
   return (
@@ -182,9 +205,9 @@ export function CanonicalFiltersBar({
                 key={n}
                 type="button"
                 onClick={() => onChangeMinBrands(n)}
-                aria-pressed={minBrandsLocal === n}
+                aria-pressed={minBrands === n}
                 className={`min-w-[2.25rem] rounded-full px-2 py-1 text-xs font-semibold transition-shadow focus:outline-none focus-visible:ring-2 focus-visible:ring-brand ${
-                  minBrandsLocal === n
+                  minBrands === n
                     ? "shadow-inset text-brand"
                     : "shadow-raised-sm text-ink-soft hover:shadow-raised"
                 }`}
