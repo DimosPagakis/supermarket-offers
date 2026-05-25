@@ -1,0 +1,130 @@
+"""Integration test for the Lidl listing parser.
+
+Run against a committed snapshot of a real listing page
+(``tests/fixtures/lidl/listing.html`` — captured 2026-05-25 from
+``/c/evdomadiaies-epiloges-26kw22/a10095458``). This is exactly the
+flavour of test the crawler CLAUDE.md asks for: selector / schema
+drift detection against frozen HTML, no live network.
+
+If Lidl reshapes the ``data-grid-data`` JSON, these assertions break
+loudly and we tune the parser before shipping.
+"""
+
+from __future__ import annotations
+
+from datetime import date, datetime, timezone
+from decimal import Decimal
+from pathlib import Path
+
+from scraper.items import OfferItem
+from scraper.parsers.lidl import extract_offers
+
+FIXTURE = Path(__file__).parent / "fixtures" / "lidl" / "listing.html"
+SCRAPED_AT = datetime(2026, 5, 25, 12, 0, 0, tzinfo=timezone.utc)
+
+
+def _load_offers() -> list[OfferItem]:
+    return list(extract_offers(FIXTURE.read_text(encoding="utf-8"), SCRAPED_AT))
+
+
+def test_extracts_priced_offers_only() -> None:
+    """The fixture has 27 grid cards. Five of them carry no current sale
+    price and must be skipped silently:
+      * 3 with an entirely empty ``regionsPrices`` (online-only / banner
+        wrappers),
+      * 2 with ``regionsPrices.1`` present but ``futurePrices == []``
+        (RETAIL products without a current promotion).
+    Net expected: 22 priced offers."""
+    offers = _load_offers()
+    assert len(offers) == 22, f"expected 22 priced offers, got {len(offers)}"
+
+
+def test_first_offer_maps_all_critical_fields() -> None:
+    """Smoke-check the first offer end-to-end against known fixture values."""
+    offers = _load_offers()
+    first = offers[0]
+
+    # Greek title preserved (no transliteration, no whitespace damage).
+    assert first.name == "Χαρτί κουζίνας 3πλα φύλλα"
+
+    # Lidl productId becomes external_id as a string.
+    assert first.external_id == "11022981"
+
+    # Sale + original price decoded as Decimal with the right scale.
+    assert first.price == Decimal("2.29")
+    assert first.original_price == Decimal("3.29")
+    assert first.discount_pct == 30
+
+    # Currency preserved from JSON, not hardcoded.
+    assert first.currency == "EUR"
+
+    # Validity dates parsed from ISO timestamps.
+    assert first.valid_from == date(2026, 5, 27)
+    assert first.valid_to == date(2026, 6, 3)
+
+    # Canonical URL becomes an absolute Lidl URL.
+    assert first.url is not None
+    assert first.url.startswith("https://www.lidl-hellas.gr/p/")
+    assert "p11022981" in first.url
+
+    # First image from imageList_V1.
+    assert first.image_url is not None
+    assert first.image_url.startswith("https://www.lidl-hellas.gr/assets/")
+
+    # Packaging string lands in `unit`.
+    assert first.unit == "208 φύλλα (720 g)"
+
+
+def test_handles_offer_without_discount_block() -> None:
+    """Item #2 in the fixture (Κοπανάκι κοτόπουλο XXL) has a price but no
+    oldPrice / percentageDiscount. Parser should keep the offer and just
+    omit the optional fields."""
+    offers = _load_offers()
+
+    target = next((o for o in offers if o.external_id == "11529991"), None)
+    assert target is not None, "expected to find productId 11529991"
+    assert target.name.strip().startswith("Κοπανάκι κοτόπουλο")
+    assert target.price == Decimal("4.49")
+    assert target.original_price is None
+    assert target.discount_pct is None
+
+
+def test_offers_are_deduplicated_by_external_id() -> None:
+    """Lidl occasionally renders the same product in multiple grid sections
+    on one page. The parser dedupes within a single document."""
+    offers = _load_offers()
+    ids = [o.external_id for o in offers if o.external_id]
+    assert len(ids) == len(set(ids)), "duplicate external_ids leaked through"
+
+
+def test_payload_is_backend_contract_shaped() -> None:
+    """Round-trip through OfferItem.to_payload() so the contract with
+    POST /api/v1/crawl-runs/{run}/offers stays exercised end-to-end in
+    the parser test, not just the API client unit test."""
+    offers = _load_offers()
+    payload = offers[0].to_payload()
+
+    # Keys that the FormRequest on the backend side validates against.
+    for key in (
+        "external_id",
+        "name",
+        "url",
+        "image_url",
+        "category",
+        "unit",
+        "price",
+        "original_price",
+        "discount_pct",
+        "currency",
+        "valid_from",
+        "valid_to",
+        "scraped_at",
+    ):
+        assert key in payload, f"missing key in offer payload: {key}"
+
+    # Numeric fields are serialized as JSON-friendly floats / ints.
+    assert isinstance(payload["price"], float)
+    assert isinstance(payload["discount_pct"], int)
+    # Dates serialized as ISO strings.
+    assert payload["valid_from"] == "2026-05-27"
+    assert payload["valid_to"] == "2026-06-03"
