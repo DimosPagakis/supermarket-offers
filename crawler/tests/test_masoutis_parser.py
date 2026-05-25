@@ -168,22 +168,24 @@ def test_parser_skips_catalogue_leak_rows() -> None:
     assert offers[0].external_id == "123"
 
 
-def test_parser_keeps_offerdescr_only_rows() -> None:
-    """A row with no Discount string and no strikethrough is still a real
-    promo if Masoutis populated ``OfferDescr`` — that's the flyer-only
-    metadata column. The parser should emit it."""
+def test_parser_skips_offerdescr_only_rows() -> None:
+    """A row with no Discount string and no strikethrough is NOT a real
+    promo even if Masoutis populated ``OfferDescr`` — the live API
+    populates that field on most catalogue rows. Without a Discount
+    string or StartPrice > PosPrice we cannot be sure the row carries
+    a real discount, so the parser drops it.
+    """
     row = {
         "Itemcode": 777,
-        "ItemDescr": "OfferDescr-only promo",
+        "ItemDescr": "OfferDescr-only catalogue row",
         "ItemDescrLink": "https://www.masoutis.gr/categories/item/y",
         "PhotoData": "https://example.com/img.jpg",
         "PosPrice": "1.50",
         "StartPrice": "1.50",
         "Discount": None,
-        "OfferDescr": "1+1 ΔΩΡΟ",
+        "OfferDescr": "Available now",
         "BrandNameDesciption": "Brand",
         "ItemVolume": "1τμχ",
     }
     offers = list(extract_offers_from_payload([row], SCRAPED_AT))
-    assert len(offers) == 1
-    assert offers[0].external_id == "777"
+    assert offers == []

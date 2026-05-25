@@ -162,6 +162,16 @@ def _offer_from_grid_data(data: dict[str, Any], scraped_at: datetime) -> OfferIt
     if discount_pct is not None and discount_pct > 0:
         promo_label = f"−{discount_pct}%"
         promo_type = "strikethrough"
+    elif original_price is None:
+        # Promo signal was the ``discountText`` only (no numeric pct,
+        # no oldPrice). Surface that text verbatim so the row carries
+        # a real promo_label downstream — the backend's defensive
+        # validator requires at least one of discount_pct /
+        # promo_label / original_price>price.
+        raw_text = (discount_block.get("discountText") or "").strip()
+        if raw_text:
+            promo_label = raw_text[:80]
+            promo_type = "strikethrough"
 
     title = (data.get("title") or "").strip() or None
     if not title:

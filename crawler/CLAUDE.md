@@ -157,7 +157,7 @@ full catalogue into the public `/offers` endpoint:
 |-------------|-----------------------|------------------------------------------------------------------------|
 | ab          | active, gold standard | classified by `_classify_and_build` family (SHT / BXG% / BXGY / EUROS) |
 | lidl        | active                | `discount.percentageDiscount > 0` / minus-prefixed `discountText` / `oldPrice > price` |
-| masoutis    | active                | `Discount` starts with `-` / `StartPrice > PosPrice` / non-blank `OfferDescr` |
+| masoutis    | active                | `Discount` starts with `-` / `StartPrice > PosPrice` (NOT `OfferDescr` — it's populated on catalogue rows too) |
 | my-market   | active                | `span.diagonal-line` strikethrough OR `.offer-note--percent` pill |
 | sklavenitis | **inactive**          | only `.sign-badges` "N+M Δώρο" badge — too narrow; deferred pending a real flyer URL |
 
