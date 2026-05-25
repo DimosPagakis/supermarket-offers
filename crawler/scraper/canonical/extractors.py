@@ -427,6 +427,42 @@ _STOPWORDS: frozenset[str] = frozenset({
 
 _TOKEN_SPLIT_RE = re.compile(r"[^a-zα-ω0-9]+", flags=re.IGNORECASE)
 
+# Numeric-with-percent tokens (fat %, ABV, sugar %). These are SKU
+# discriminators on a non-trivial slice of the catalogue — yogurt fat
+# content (2% vs 8% στραγγιστό), beer ABV (4,5% vs 6,5%), zero-anything
+# soft drinks — so we MUST preserve them through variant normalisation.
+# Without this, "Δωδώνη Γιαούρτι Στραγγιστό 2%" and the 8% variant
+# canonicalise into the same product (Phase-2.1 residual false-merge).
+#
+# Pattern accepts optional whitespace between the number and the `%`
+# (defensive: copy in marketing text occasionally has "γιαούρτι με 2 %").
+# Bare `%` symbols not attached to a number remain stripped as generic
+# punctuation by the token splitter.
+_PCT_TOKEN_RE = re.compile(r"(\d+(?:[.,]\d+)?)\s*%")
+
+
+def _extract_percent_tokens(folded: str) -> tuple[str, set[str]]:
+    """Pull `\\d+([,.]\\d+)?\\s*%` tokens out of `folded`, returning the
+    folded string with each match replaced by a single space and the set
+    of normalised percent tokens (e.g. `{"2%", "4.5%"}`).
+
+    Comma decimals are normalised to dot so "4,5%" and "4.5%" collapse.
+    Done BEFORE the generic number-stripping pass in
+    `_strip_size_and_pack` so the digits don't get eaten.
+    """
+    tokens: set[str] = set()
+
+    def _sub(m: re.Match[str]) -> str:
+        num = m.group(1).replace(",", ".")
+        # Drop trailing ".0" so "2.0%" and "2%" collapse.
+        if num.endswith(".0"):
+            num = num[:-2]
+        tokens.add(f"{num}%")
+        return " "
+
+    new_folded = _PCT_TOKEN_RE.sub(_sub, folded)
+    return new_folded, tokens
+
 
 def _strip_brand(folded: str, brand_canonical: str | None) -> str:
     """Remove brand alias occurrences from the folded name."""
@@ -480,6 +516,10 @@ def variant_tokens(
 
     folded = _fold_lower(name)
     folded = _strip_brand(folded, manufacturer)
+    # Pull percent tokens out FIRST — `_strip_size_and_pack` strips bare
+    # digits which would otherwise destroy the SKU-distinguishing signal
+    # (2% vs 8% yogurt, 4,5% vs 6,5% ABV beer).
+    folded, percent_tokens = _extract_percent_tokens(folded)
     folded = _strip_size_and_pack(folded)
 
     # Greek→Latin fold so tokens are comparable across script choices.
@@ -489,6 +529,7 @@ def variant_tokens(
         t for t in raw_tokens
         if len(t) >= 2 and t not in _STOPWORDS and not t.isdigit()
     }
+    tokens.update(percent_tokens)
     return frozenset(tokens)
 
 
@@ -496,7 +537,11 @@ def variant_tokens(
 # Canonical key
 # ---------------------------------------------------------------------------
 
-_SLUG_PUNCT_RE = re.compile(r"[^a-z0-9]+")
+# Slug cleanup: collapse runs of non-token characters. We deliberately
+# keep `%` so percent-tokens stay readable in the canonical_key (e.g.
+# `dodoni:2%-giaoyrti-straggisto:nosize:1`) and remain distinguishable
+# from bare numerics like `4.5` vs `4.5%`.
+_SLUG_PUNCT_RE = re.compile(r"[^a-z0-9%]+")
 
 
 def _slug(tokens: frozenset[str], max_tokens: int = 4) -> str:

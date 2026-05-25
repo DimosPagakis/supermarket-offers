@@ -121,3 +121,66 @@ def test_canonical_key_with_no_size_or_variant() -> None:
     k = canonical_key("lacta", None, 1, frozenset())
     assert k.startswith("lacta:")
     assert "nosize" in k
+
+
+# --- Percent-token preservation (Phase-2.2 fix) -----------------------------
+#
+# Numeric-with-`%` tokens are SKU discriminators (yogurt fat content, beer
+# ABV, zero-sugar variants). They used to vanish during variant
+# normalisation so e.g. Δωδώνη Στραγγιστό 2% and 8% collapsed into one
+# canonical (canonical 1590 false-merge). They must now survive.
+
+
+def test_dodoni_2pct_vs_8pct_different_variant_tokens_and_keys() -> None:
+    """The exact regression from the Phase-2.1 residual false-merge note:
+    2% and 8% yogurt must NEVER canonicalise to the same product."""
+    _, _, _, v2, k2 = _features("Δωδώνη Γιαούρτι Στραγγιστό 2%")
+    _, _, _, v8, k8 = _features("Δωδώνη Γιαούρτι Στραγγιστό 8%")
+    assert v2 != v8, (v2, v8)
+    assert "2%" in v2
+    assert "8%" in v8
+    assert k2 != k8, (k2, k8)
+    # Both must be assigned canonical keys (manufacturer detected).
+    assert k2 is not None and k8 is not None
+
+
+def test_alpha_lager_abv_variants_different_tokens() -> None:
+    """Greek-comma decimals must normalise to dot inside the percent token
+    so "4,5%" → "4.5%" and the two ABVs stay distinct."""
+    _, _, _, v45, _ = _features("Alpha Ελληνική Lager 4,5%")
+    _, _, _, v65, _ = _features("Alpha Ελληνική Lager 6,5%")
+    assert v45 != v65, (v45, v65)
+    assert "4.5%" in v45
+    assert "6.5%" in v65
+
+
+def test_no_percent_pair_unaffected() -> None:
+    """Sanity-check: a name pair WITHOUT any `%` token must produce the
+    same tokens/key as it did before the fix (regex not accidentally
+    widened to strip arbitrary digits)."""
+    _, _, _, v1, k1 = _features("MELISSA Σπαγγέτι Χωρίς γλουτένη 400g")
+    _, _, _, v2, k2 = _features("Melissa Σπαγγέτι Χωρίς Γλουτένη 400gr")
+    assert v1 == v2
+    assert k1 == k2
+    # No spurious percent tokens were introduced.
+    assert not any("%" in t for t in v1)
+
+
+def test_spaced_percent_token_still_captured() -> None:
+    """Defensive: marketing copy occasionally writes "γιαούρτι με 2 %"
+    with a space between the number and the `%`. We pin the behaviour:
+    yes, that still counts as a percent token (same SKU-distinguishing
+    meaning). If we ever want to flip this, change the regex's `\\s*`
+    and update this test."""
+    _, _, _, v, _ = _features("γιαούρτι με 2 %")
+    assert "2%" in v
+
+
+def test_canonical_key_includes_percent_token_in_slug() -> None:
+    """The percent token must appear in the slug section of the
+    canonical_key so the key is self-describing in DB inspection."""
+    _, _, _, _, k = _features("Δωδώνη Γιαούρτι Στραγγιστό 2%")
+    assert k is not None
+    # Slug section is the 2nd colon-segment.
+    slug = k.split(":")[1]
+    assert "2%" in slug

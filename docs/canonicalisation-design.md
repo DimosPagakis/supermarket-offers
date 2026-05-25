@@ -623,6 +623,39 @@ exact bug Phase 2.1 just fixed.
 
 ---
 
+## Phase 2.2 — `%`-token preservation
+
+### What was broken
+
+`variant_tokens` ran a generic "strip all bare numbers and
+punctuation" pass that ate **numeric-with-percent** tokens (`2%`,
+`8%`, `4,5%`). Net effect: `Δωδώνη Γιαούρτι Στραγγιστό 2%` and
+`Δωδώνη Γιαούρτι Στραγγιστό 8%` produced the same `canonical_key` and
+merged into one canonical (observed live as canonical 1590 — Phase
+2.1's residual false-merge note). Same shape broke yogurt fat
+content, beer ABV (Alpha 4,5% vs 6,5%), and "0%" sugar/alcohol/fat
+variants.
+
+### Fix
+
+A new `_PCT_TOKEN_RE = re.compile(r"(\d+(?:[.,]\d+)?)\s*%")` extracts
+percent tokens BEFORE the generic number-strip pass, normalises the
+inner numeric (`,` → `.`, trailing `.0` dropped), and re-injects them
+as atomic tokens (`"2%"`, `"4.5%"`). The slug builder's punctuation
+filter was widened to keep `%` so canonical keys stay self-describing
+(e.g. `dodoni:2%-giaoyrti-straggisto:1kg:1`). Bare `%` not attached
+to a number is still stripped as generic punctuation.
+
+### Why it matters
+
+Percent is the one-character SKU discriminator on a non-trivial slice
+of the catalogue (dairy, beer, zero-anything soft drinks). Same
+family of fix as Phase 2.1's disjoint-variant guard: catch the
+discriminator at the deterministic layer, never let it leak into
+fuzzy scoring.
+
+---
+
 ### See also
 
 - `crawler/scripts/canon_explore.py` — the read-only helper used to
