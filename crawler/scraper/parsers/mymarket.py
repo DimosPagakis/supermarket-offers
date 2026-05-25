@@ -38,6 +38,34 @@ from scraper.items import OfferItem
 MYMARKET_BASE_URL = "https://www.mymarket.gr"
 
 
+def extract_total_pages(html_text: str) -> int | None:
+    """Return the highest ``?page=N`` link advertised in the listing's
+    pagination nav, or ``None`` if no pagination is present.
+
+    My Market's pagination block renders direct anchors for the first few
+    pages, an ellipsis, then the final couple of pages. We pick the
+    maximum integer out of every ``data-mkey="page-<N>"`` anchor — that
+    matches the "go to last page" link the user sees in the UI.
+
+    Returns ``None`` (not ``1``) when no page anchors are present so the
+    caller can distinguish "listing has zero pagination block" (treat as
+    a single page) from "listing parser broke" (warn).
+    """
+    sel = Selector(text=html_text)
+    keys = sel.css('nav a::attr(data-mkey)').getall()
+    page_numbers: list[int] = []
+    for key in keys:
+        if not key or not key.startswith("page-"):
+            continue
+        try:
+            page_numbers.append(int(key[len("page-"):]))
+        except ValueError:
+            continue
+    if not page_numbers:
+        return None
+    return max(page_numbers)
+
+
 def extract_offers(html_text: str, scraped_at: datetime) -> Iterable[OfferItem]:
     """Yield OfferItems for every product card on a My Market listing page."""
     sel = Selector(text=html_text)
