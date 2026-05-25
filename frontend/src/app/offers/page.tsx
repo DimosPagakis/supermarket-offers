@@ -14,8 +14,17 @@ export default async function OffersPage({
 }: PageProps<"/offers">) {
   const raw = await searchParams;
   const query = parseOfferQuery(raw);
+  // Default to newest-first sort so applying a discount filter visibly
+  // shrinks the deck. With the backend's `discount_pct desc` default the
+  // top of page-1 stays the same after toggling a filter (the highest-
+  // discount items naturally satisfy any min_discount threshold), making
+  // it look like the filter did nothing. `scraped_at desc` surfaces
+  // recently-crawled offers, so the page-1 list materially changes when
+  // a discount filter clips out items.
   const merged = {
     ...query,
+    sort: query.sort ?? "scraped_at",
+    dir: query.dir ?? ("desc" as const),
     per_page: query.per_page ?? 50,
   };
 
