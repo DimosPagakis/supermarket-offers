@@ -201,6 +201,8 @@ A real response item (truncated to one row):
       "price": 6.08,
       "original_price": 7.15,
       "discount_pct": 15,
+      "promo_label": "Κέρδος 15%",
+      "promo_type": "strikethrough",
       "currency": "EUR",
       "valid_from": "2026-05-25",
       "valid_to": "2026-06-03",
@@ -438,6 +440,33 @@ stripped of Greek diacritics. The `q` filter compares against
 We do not perform accent normalisation on `category` because category
 strings come from a small curated set per brand; if your filter doesn't
 match, hit `/categories` to see the exact spelling.
+
+---
+
+## Promo label & promo type
+
+Every `offer` payload now carries two optional fields alongside the
+existing numeric pricing columns:
+
+| Field | Type | Notes |
+|---|---|---|
+| `promo_label` | `string \| null`, ≤ 80 chars | **Advisory display copy** — the brand-supplied Greek badge text the shopper sees on the brand's own page (e.g. `"1+1 δώρο"`, `"-30% στα 2"`, `"Κέρδος 15%"`). Render verbatim — do not parse. |
+| `promo_type` | `string \| null`, ≤ 32 chars | **Structured kind** of promotion. One of `strikethrough`, `bxgy_free`, `bxg_percent`, `discount_euros`, `loyalty_points`. Use this to branch UI / filtering logic. |
+
+For `strikethrough` deals the `price` column is the real per-unit
+discounted shelf price (legacy behaviour). For `bxgy_free`,
+`bxg_percent` and `discount_euros` the `price` is the **regular shelf
+price** — the multi-buy maths only applies if the shopper buys the
+qualifying basket, so we deliberately do not pretend the per-unit
+effective price is what they will see at the till. `original_price`
+and `discount_pct` are typically null for those families; the
+`promo_label` carries the savings narrative.
+
+Both fields are nullable and additive. Clients written against the
+pre-promo-label contract see `null` and continue to work; they just
+miss the richer label rendering. New clients should prefer
+`promo_label` over the numeric `discount_pct` when both are set —
+brand-supplied copy is more precise than our reconstruction.
 
 ---
 

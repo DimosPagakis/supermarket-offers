@@ -59,6 +59,8 @@ class IngestOffers
                     'price' => $item['price'],
                     'original_price' => $item['original_price'] ?? null,
                     'discount_pct' => $item['discount_pct'] ?? null,
+                    'promo_label' => $item['promo_label'] ?? null,
+                    'promo_type' => $item['promo_type'] ?? null,
                     'currency' => $item['currency'] ?? 'EUR',
                     'valid_from' => $item['valid_from'] ?? null,
                     'valid_to' => $item['valid_to'] ?? null,

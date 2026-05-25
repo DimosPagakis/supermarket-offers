@@ -31,6 +31,8 @@ class OfferResource extends JsonResource
             'price' => $this->price !== null ? (float) $this->price : null,
             'original_price' => $this->original_price !== null ? (float) $this->original_price : null,
             'discount_pct' => $this->discount_pct !== null ? (int) $this->discount_pct : null,
+            'promo_label' => $this->promo_label,
+            'promo_type' => $this->promo_type,
             'currency' => $this->currency,
             'valid_from' => $this->valid_from?->format('Y-m-d'),
             'valid_to' => $this->valid_to?->format('Y-m-d'),

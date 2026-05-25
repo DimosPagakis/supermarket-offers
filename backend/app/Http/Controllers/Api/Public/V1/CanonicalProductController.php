@@ -145,6 +145,8 @@ class CanonicalProductController extends Controller
                         'price' => $o->price !== null ? (float) $o->price : null,
                         'original_price' => $o->original_price !== null ? (float) $o->original_price : null,
                         'discount_pct' => $o->discount_pct !== null ? (int) $o->discount_pct : null,
+                        'promo_label' => $o->promo_label,
+                        'promo_type' => $o->promo_type,
                         'valid_from' => $o->valid_from?->format('Y-m-d'),
                         'valid_to' => $o->valid_to?->format('Y-m-d'),
                         'scraped_at' => $o->scraped_at?->toIso8601String(),
