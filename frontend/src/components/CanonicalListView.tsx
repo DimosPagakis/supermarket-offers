@@ -1,4 +1,4 @@
-import { CanonicalFiltersSidebar } from "./CanonicalFiltersSidebar";
+import { CanonicalFiltersBar } from "./CanonicalFiltersBar";
 import { CanonicalGrid } from "./CanonicalGrid";
 import { EmptyState } from "./EmptyState";
 import { Pagination } from "./Pagination";
@@ -18,6 +18,12 @@ type Props = {
   heading?: React.ReactNode;
 };
 
+/**
+ * Compare-catalogue layout. Filters live in a horizontal bar above the
+ * grid so the catalogue gets the full page width — comparison cards
+ * benefit from breathing room and a wider grid than the sidebar layout
+ * allowed.
+ */
 export function CanonicalListView({
   query,
   page,
@@ -32,45 +38,42 @@ export function CanonicalListView({
   };
 
   return (
-    <div className="flex flex-col gap-6 lg:flex-row">
-      <div className="lg:w-64 lg:shrink-0">
-        <CanonicalFiltersSidebar
-          brands={brands}
-          categories={categories}
-          maxBrands={Math.max(2, brands.length)}
-        />
-      </div>
+    <div className="flex flex-col gap-6">
+      {heading}
 
-      <div className="flex min-w-0 flex-1 flex-col gap-4">
-        {heading}
-        <div className="flex items-center justify-between text-sm text-zinc-600 dark:text-zinc-400">
+      <CanonicalFiltersBar
+        brands={brands}
+        categories={categories}
+        maxBrands={Math.max(2, brands.length)}
+      />
+
+      <div className="flex items-center justify-between text-sm text-ink-soft">
+        <span>
+          {page.meta.total > 0
+            ? `${page.meta.total.toLocaleString("el-GR")} προϊόντα προς σύγκριση`
+            : "Κανένα συγκρίσιμο προϊόν"}
+        </span>
+        {page.meta.last_page > 1 && (
           <span>
-            {page.meta.total > 0
-              ? `${page.meta.total.toLocaleString("el-GR")} προϊόντα προς σύγκριση`
-              : "Κανένα συγκρίσιμο προϊόν"}
+            Σελίδα {page.meta.current_page} από {page.meta.last_page}
           </span>
-          {page.meta.last_page > 1 && (
-            <span>
-              Σελίδα {page.meta.current_page} από {page.meta.last_page}
-            </span>
-          )}
-        </div>
-
-        {page.data.length === 0 ? (
-          <EmptyState
-            title="Κανένα συγκρίσιμο προϊόν"
-            message="Δοκίμασε λιγότερα φίλτρα ή χαμηλότερο όριο αλυσίδων."
-          />
-        ) : (
-          <CanonicalGrid products={page.data} />
         )}
-
-        <Pagination
-          currentPage={page.meta.current_page}
-          lastPage={page.meta.last_page}
-          hrefForPage={hrefForPage}
-        />
       </div>
+
+      {page.data.length === 0 ? (
+        <EmptyState
+          title="Κανένα συγκρίσιμο προϊόν"
+          message="Δοκίμασε λιγότερα φίλτρα ή χαμηλότερο όριο αλυσίδων."
+        />
+      ) : (
+        <CanonicalGrid products={page.data} />
+      )}
+
+      <Pagination
+        currentPage={page.meta.current_page}
+        lastPage={page.meta.last_page}
+        hrefForPage={hrefForPage}
+      />
     </div>
   );
 }

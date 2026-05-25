@@ -31,7 +31,7 @@ export async function generateMetadata(
   const title = `${product.display_name} — Συγκρίνετε τιμές σε ${product.brands_count} αλυσίδες`;
   const description = `Από ${formatPrice(product.min_price)}. Εξοικονομείτε ${formatPrice(
     product.price_savings,
-  )}${savingsPct > 0 ? ` (${savingsPct}%)` : ""} ψωνίζοντας στην ${product.cheapest_brand.name}.`;
+  )}${savingsPct > 0 ? ` (${savingsPct}%)` : ""}${product.cheapest_brand ? ` ψωνίζοντας στην ${product.cheapest_brand.name}` : ""}.`;
 
   return {
     title,
@@ -89,15 +89,15 @@ export default async function CompareDetailPage({
 
   return (
     <article className="flex flex-col gap-8">
-      <nav className="text-sm text-zinc-500">
-        <Link href="/compare" className="hover:text-emerald-600">
+      <nav className="text-sm text-ink-soft">
+        <Link href="/compare" className="hover:text-brand transition-colors">
           ← Όλες οι συγκρίσεις
         </Link>
       </nav>
 
       {/* Hero */}
       <section className="grid grid-cols-1 gap-6 md:grid-cols-2">
-        <div className="relative aspect-square overflow-hidden rounded-xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
+        <div className="relative aspect-square overflow-hidden rounded-[var(--radius-soft)] bg-canvas shadow-raised-lg">
           {image_url ? (
             <Image
               src={image_url}
@@ -108,15 +108,15 @@ export default async function CompareDetailPage({
               priority
             />
           ) : (
-            <div className="flex h-full w-full items-center justify-center text-7xl text-zinc-300 dark:text-zinc-700">
+            <div className="flex h-full w-full items-center justify-center text-7xl text-ink-muted">
               <span aria-hidden>🛒</span>
             </div>
           )}
           <span
-            className={`absolute left-3 top-3 rounded-md px-3 py-1 text-sm font-bold shadow ${
+            className={`absolute left-3 top-3 rounded-full px-3 py-1 text-sm font-bold ${
               brands_count >= 5
-                ? "bg-amber-500 text-white"
-                : "bg-emerald-600 text-white"
+                ? "bg-warn-soft text-ink"
+                : "bg-brand-fade text-brand"
             }`}
           >
             Διαθέσιμο σε {brands_count} αλυσίδες
@@ -125,50 +125,48 @@ export default async function CompareDetailPage({
 
         <div className="flex flex-col gap-4">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="inline-flex items-center rounded-full bg-zinc-100 px-3 py-1 text-xs font-medium text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
+            <span className="inline-flex items-center rounded-full bg-canvas px-3 py-1 text-xs font-semibold text-ink-soft shadow-raised-sm">
               {manufacturer_brand}
             </span>
             {category && (
-              <span className="text-xs text-zinc-500">{category}</span>
+              <span className="text-xs text-ink-muted">{category}</span>
             )}
           </div>
 
-          <h1 className="text-2xl font-bold tracking-tight">{display_name}</h1>
+          <h1 className="text-2xl font-bold tracking-tight text-ink">{display_name}</h1>
 
           <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
             {sizeLabel && (
               <>
-                <dt className="text-zinc-500">Συσκευασία</dt>
-                <dd className="text-zinc-800 dark:text-zinc-200">{sizeLabel}</dd>
+                <dt className="text-ink-muted">Συσκευασία</dt>
+                <dd className="text-ink">{sizeLabel}</dd>
               </>
             )}
             {variant_descriptor && (
               <>
-                <dt className="text-zinc-500">Παραλλαγή</dt>
-                <dd className="text-zinc-800 dark:text-zinc-200">
-                  {variant_descriptor}
-                </dd>
+                <dt className="text-ink-muted">Παραλλαγή</dt>
+                <dd className="text-ink">{variant_descriptor}</dd>
               </>
             )}
           </dl>
 
-          <div className="mt-2 flex flex-col gap-1 rounded-xl border border-emerald-200 bg-emerald-50 p-4 dark:border-emerald-900/40 dark:bg-emerald-900/20">
-            <p className="text-xs uppercase tracking-wide text-emerald-700 dark:text-emerald-300">
+          <div className="mt-2 flex flex-col gap-1 rounded-[var(--radius-soft)] bg-canvas p-5 shadow-raised">
+            <p className="text-xs uppercase tracking-wide text-accent-hover font-semibold">
               Εξοικονομείς έως
             </p>
-            <p className="text-3xl font-bold text-emerald-700 dark:text-emerald-300">
+            <p className="text-3xl font-bold text-accent">
               {formatPrice(price_savings)}
               {savingsPct > 0 && (
-                <span className="ml-2 text-base font-medium">
+                <span className="ml-2 text-base font-medium text-accent-hover">
                   ({savingsPct}%)
                 </span>
               )}
             </p>
-            <p className="text-sm text-emerald-800 dark:text-emerald-200">
+            <p className="text-sm text-ink-soft">
               {price_savings > 0 ? (
                 <>
                   Από {formatPrice(min_price)} (
-                  <span className="font-semibold">{cheapest_brand.name}</span>) έως {formatPrice(max_price)}.
+                  <span className="font-semibold text-ink">{cheapest_brand?.name ?? "—"}</span>) έως {formatPrice(max_price)}.
                 </>
               ) : (
                 <>Όλες οι αλυσίδες έχουν την ίδια τιμή: {formatPrice(min_price)}.</>
@@ -192,7 +190,7 @@ export default async function CompareDetailPage({
           <h2 className="text-lg font-semibold tracking-tight">
             Στις άλλες αλυσίδες
           </h2>
-          <p className="text-sm text-zinc-600 dark:text-zinc-400">
+          <p className="text-sm text-ink-soft">
             Δεν εντοπίσαμε ενεργή προσφορά για αυτό το προϊόν στις παρακάτω
             αλυσίδες. Δείτε τι προσφέρουν τώρα:
           </p>

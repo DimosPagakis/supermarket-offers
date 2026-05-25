@@ -9,20 +9,20 @@ type Props = {
 
 /**
  * Cross-chain price comparison. Each row links to the chain's own product
- * page in a new tab; clicking the brand chip jumps to our brand page; the
- * "↗ Δες προσφορά" link goes to our internal offer detail. The cheapest
- * row is highlighted with a ⭐.
+ * page in a new tab; the brand chip jumps to our brand page; "Λεπτομέρειες"
+ * goes to our internal offer detail. The cheapest row is highlighted with
+ * a French-pink-tinted background and a ⭐.
  *
  * Renders an empty-state when `offers` is empty (defensive: backend should
- * never return zero, but a stale canonical with no live offers is
- * possible during rebuilds).
+ * never return zero, but a stale canonical with no live offers is possible
+ * during rebuilds).
  */
 export function PriceComparisonTable({ offers }: Props) {
   if (offers.length === 0) {
     return (
       <div
         role="status"
-        className="rounded-xl border border-dashed border-zinc-300 bg-white p-6 text-center text-sm text-zinc-600 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-400"
+        className="rounded-[var(--radius-soft)] bg-canvas p-6 text-center text-sm text-ink-soft shadow-inset"
       >
         Δεν υπάρχουν ενεργές προσφορές αυτή τη στιγμή για αυτό το προϊόν.
       </div>
@@ -32,9 +32,9 @@ export function PriceComparisonTable({ offers }: Props) {
   const cheapestPrice = Math.min(...offers.map((o) => o.offer.price));
 
   return (
-    <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+    <div className="overflow-hidden rounded-[var(--radius-soft)] bg-canvas shadow-raised">
       <table className="w-full text-sm">
-        <thead className="bg-zinc-50 text-left text-xs uppercase tracking-wide text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400">
+        <thead className="bg-canvas-muted text-left text-xs uppercase tracking-wide text-ink-muted">
           <tr>
             <th scope="col" className="px-4 py-3">
               Αλυσίδα
@@ -56,13 +56,13 @@ export function PriceComparisonTable({ offers }: Props) {
             </th>
           </tr>
         </thead>
-        <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
+        <tbody className="divide-y divide-border">
           {offers.map((entry) => {
             const { brand, product, offer } = entry;
             const isCheapest = offer.price === cheapestPrice;
             const rowClass = isCheapest
-              ? "bg-emerald-50/80 dark:bg-emerald-900/20"
-              : "hover:bg-zinc-50 dark:hover:bg-zinc-800/50";
+              ? "bg-accent-soft/40"
+              : "hover:bg-canvas-muted";
             return (
               <tr key={`${brand.slug}-${offer.id}`} className={rowClass}>
                 <td className="px-4 py-3">
@@ -76,38 +76,38 @@ export function PriceComparisonTable({ offers }: Props) {
                       <span
                         aria-label="Φθηνότερη τιμή"
                         title="Φθηνότερη τιμή"
-                        className="text-amber-500"
+                        className="text-accent"
                       >
                         ⭐
                       </span>
                     )}
                   </div>
                 </td>
-                <td className="px-4 py-3 text-right font-semibold text-zinc-900 dark:text-zinc-100">
+                <td className="px-4 py-3 text-right font-semibold text-ink">
                   {formatPrice(offer.price)}
                 </td>
-                <td className="hidden px-4 py-3 text-right text-zinc-400 line-through sm:table-cell">
+                <td className="hidden px-4 py-3 text-right text-ink-muted line-through sm:table-cell">
                   {offer.original_price != null
                     ? formatPrice(offer.original_price)
                     : "—"}
                 </td>
                 <td className="hidden px-4 py-3 text-right sm:table-cell">
                   {offer.discount_pct != null && offer.discount_pct > 0 ? (
-                    <span className="rounded-md bg-rose-100 px-2 py-0.5 text-xs font-semibold text-rose-700 dark:bg-rose-900/30 dark:text-rose-300">
+                    <span className="rounded-full bg-accent px-2 py-0.5 text-xs font-semibold text-white">
                       -{offer.discount_pct}%
                     </span>
                   ) : (
-                    <span className="text-zinc-400">—</span>
+                    <span className="text-ink-muted">—</span>
                   )}
                 </td>
-                <td className="hidden px-4 py-3 text-zinc-600 dark:text-zinc-400 md:table-cell">
+                <td className="hidden px-4 py-3 text-ink-soft md:table-cell">
                   {offer.valid_to ? formatDate(offer.valid_to) : "—"}
                 </td>
                 <td className="px-4 py-3 text-right">
                   <div className="flex items-center justify-end gap-3">
                     <Link
                       href={`/offers/${offer.id}`}
-                      className="text-xs font-medium text-emerald-700 hover:underline dark:text-emerald-400"
+                      className="text-xs font-medium text-brand transition-colors hover:text-brand-hover"
                     >
                       Λεπτομέρειες
                     </Link>
@@ -116,7 +116,7 @@ export function PriceComparisonTable({ offers }: Props) {
                         href={product.url}
                         target="_blank"
                         rel="noreferrer noopener"
-                        className="text-xs font-medium text-zinc-600 hover:text-emerald-600 dark:text-zinc-400"
+                        className="text-xs font-medium text-ink-soft transition-colors hover:text-brand"
                       >
                         Στο {brand.name} ↗
                       </a>

@@ -147,7 +147,7 @@ export default async function OfferDetailPage({
           {product.canonical_product_id != null && (
             <Link
               href={`/compare/${product.canonical_product_id}`}
-              className="inline-flex items-center justify-center rounded-md border border-emerald-600 bg-white px-4 py-2 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-50 dark:bg-zinc-900 dark:text-emerald-400 dark:hover:bg-zinc-800"
+              className="inline-flex items-center justify-center rounded-[var(--radius-soft-pill)] bg-canvas px-5 py-2.5 text-sm font-semibold text-brand shadow-raised transition-shadow hover:shadow-raised-lg active:shadow-inset focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
             >
               Σύγκριση σε άλλες αλυσίδες →
             </Link>

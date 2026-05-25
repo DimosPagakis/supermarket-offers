@@ -16,7 +16,7 @@ export default function GlobalError({
   return (
     <div className="flex flex-col items-center justify-center gap-4 py-24 text-center">
       <h1 className="text-2xl font-bold">Κάτι πήγε στραβά</h1>
-      <p className="max-w-md text-sm text-zinc-600 dark:text-zinc-400">
+      <p className="max-w-md text-sm text-ink-soft">
         Δεν καταφέραμε να φορτώσουμε τις προσφορές. Δοκίμασε ξανά σε λίγο.
       </p>
       <button

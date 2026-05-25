@@ -115,7 +115,7 @@ export type CanonicalProductSummary = {
   min_price: number;
   max_price: number;
   avg_price: number;
-  cheapest_brand: CanonicalCheapestBrand;
+  cheapest_brand: CanonicalCheapestBrand | null;
 };
 
 export type CanonicalOffer = {

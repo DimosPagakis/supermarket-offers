@@ -152,7 +152,7 @@ function applyCanonicalFilters(
     // mock canonical details to honour "any member in those brands".
     list = list.filter((c) => {
       const detail = mockCanonicalDetails[c.id];
-      if (!detail) return set.has(c.cheapest_brand.slug);
+      if (!detail) return c.cheapest_brand ? set.has(c.cheapest_brand.slug) : false;
       return detail.offers.some((o) => set.has(o.brand.slug));
     });
   }
