@@ -25,7 +25,12 @@ class CrawlerDispatchCommandTest extends TestCase
         config()->set('services.crawler.backend_url', 'http://127.0.0.1:8001');
         config()->set('services.crawler.backend_token', 'test-token');
 
-        Process::fake();
+        // The dispatch command shells out via `/bin/sh -c "... & echo $!"`
+        // and reads the stdout as the PID. The fake must return a
+        // numeric-looking stdout for the "empty pid" guard to pass.
+        Process::fake([
+            '*' => Process::result(output: '12345'),
+        ]);
     }
 
     private function makeBrand(string $slug, bool $active = true, string $cron = '0 6 * * *'): Brand
@@ -51,6 +56,24 @@ class CrawlerDispatchCommandTest extends TestCase
         return $brand;
     }
 
+    /**
+     * Extract the spider slug from the shell-wrapped command the dispatch
+     * issues. The command is a 3-element array
+     * `['/bin/sh', '-c', '<shell string>']`; the slug is the last
+     * single-quoted argument to `scrapy crawl`.
+     */
+    private function slugFromCommand(array $command): ?string
+    {
+        if (count($command) !== 3 || $command[0] !== '/bin/sh' || $command[1] !== '-c') {
+            return null;
+        }
+        if (preg_match("/scrapy crawl '([^']+)'/", $command[2], $m) === 1) {
+            return $m[1];
+        }
+
+        return null;
+    }
+
     public function test_dispatch_by_slug_starts_process_with_expected_command_cwd_and_env(): void
     {
         $this->makeBrand('lidl');
@@ -61,11 +84,21 @@ class CrawlerDispatchCommandTest extends TestCase
         Process::assertRan(function (PendingProcess $process, $result) {
             $command = $process->command;
             $this->assertIsArray($command);
-            $this->assertSame(['.venv/bin/python', '-m', 'scrapy', 'crawl', 'lidl'], $command);
-            $this->assertSame(base_path(), $process->path);
-            $this->assertSame('http://127.0.0.1:8001', $process->environment['BACKEND_URL'] ?? null);
-            $this->assertSame('test-token', $process->environment['BACKEND_TOKEN'] ?? null);
-            $this->assertSame('manual', $process->environment['TRIGGERED_BY'] ?? null);
+            $this->assertSame('/bin/sh', $command[0]);
+            $this->assertSame('-c', $command[1]);
+            $shellLine = $command[2];
+
+            // The shell line should set BACKEND_URL/BACKEND_TOKEN/TRIGGERED_BY,
+            // cd into the crawler path, then invoke scrapy crawl <slug>.
+            $this->assertStringContainsString("BACKEND_URL='http://127.0.0.1:8001'", $shellLine);
+            $this->assertStringContainsString("BACKEND_TOKEN='test-token'", $shellLine);
+            $this->assertStringContainsString("TRIGGERED_BY='manual'", $shellLine);
+            $this->assertStringContainsString("cd '" . base_path() . "'", $shellLine);
+            $this->assertStringContainsString("scrapy crawl 'lidl'", $shellLine);
+            // Ensure we're detaching properly: nohup + redirect + background.
+            $this->assertStringContainsString('nohup', $shellLine);
+            $this->assertStringContainsString('> ', $shellLine);
+            $this->assertStringContainsString('2>&1 &', $shellLine);
 
             return true;
         });
@@ -101,9 +134,12 @@ class CrawlerDispatchCommandTest extends TestCase
         ])->assertSuccessful();
 
         Process::assertRan(function (PendingProcess $process, $result) {
-            return ($process->environment['TRIGGERED_BY'] ?? null) === 'schedule'
-                && is_array($process->command)
-                && in_array('ab', $process->command, true);
+            if (! is_array($process->command) || count($process->command) !== 3) {
+                return false;
+            }
+
+            return str_contains($process->command[2], "TRIGGERED_BY='schedule'")
+                && str_contains($process->command[2], "scrapy crawl 'ab'");
         });
     }
 
@@ -118,9 +154,9 @@ class CrawlerDispatchCommandTest extends TestCase
 
         $dispatchedSlugs = [];
         Process::assertRan(function (PendingProcess $process, $result) use (&$dispatchedSlugs) {
-            if (is_array($process->command)) {
-                // last token is the spider slug
-                $dispatchedSlugs[] = end($process->command);
+            $slug = is_array($process->command) ? $this->slugFromCommand($process->command) : null;
+            if ($slug !== null) {
+                $dispatchedSlugs[] = $slug;
             }
 
             return true;
@@ -139,8 +175,9 @@ class CrawlerDispatchCommandTest extends TestCase
 
         $dispatchedSlugs = [];
         Process::assertRan(function (PendingProcess $process, $result) use (&$dispatchedSlugs) {
-            if (is_array($process->command)) {
-                $dispatchedSlugs[] = end($process->command);
+            $slug = is_array($process->command) ? $this->slugFromCommand($process->command) : null;
+            if ($slug !== null) {
+                $dispatchedSlugs[] = $slug;
             }
 
             return true;

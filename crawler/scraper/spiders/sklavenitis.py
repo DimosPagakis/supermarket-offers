@@ -31,6 +31,7 @@ Trade-offs vs. a Playwright bootstrap:
 from __future__ import annotations
 
 import asyncio
+import os
 from datetime import datetime, timezone
 
 import scrapy
@@ -42,8 +43,11 @@ SKLAVENITIS_BASE_URL = "https://www.sklavenitis.gr"
 SKLAVENITIS_OFFERS_PATH = "/sylloges/prosfores/"
 
 # Safety cap. ~125 known pages × 24 cards ≈ 3,000 catalogue items; the
-# default keeps a smoke run under ~30 s at the polite delay below.
-SKLAVENITIS_MAX_PAGES = 5
+# default is set high enough to cover the full catalogue with headroom.
+# Override at runtime with ``CRAWLER_MAX_PAGES_SKLAVENITIS=<N>`` (e.g.
+# drop to 5 for a fast smoke run, raise if Sklavenitis grows their
+# catalogue past ~7000 items).
+SKLAVENITIS_MAX_PAGES = int(os.getenv("CRAWLER_MAX_PAGES_SKLAVENITIS", "300"))
 
 # Akamai-friendly: behave like a real browser tab opened from the
 # homepage. Anything more aggressive risks waking the WAF.

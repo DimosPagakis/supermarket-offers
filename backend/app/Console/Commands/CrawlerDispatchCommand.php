@@ -92,29 +92,78 @@ class CrawlerDispatchCommand extends Command
             return 'failed';
         }
 
+        // Laravel inherits a lowercase `LOG_LEVEL=debug` from the host
+        // environment which Scrapy's logging configurator rejects
+        // (Python's logging module wants uppercase). Override it
+        // explicitly here so the spider boots regardless of host env.
         $env = [
             'BACKEND_URL' => (string) config('services.crawler.backend_url'),
             'BACKEND_TOKEN' => (string) config('services.crawler.backend_token'),
             'TRIGGERED_BY' => $triggeredBy,
+            'LOG_LEVEL' => 'INFO',
         ];
 
-        try {
-            $invoked = Process::path($crawlerPath)
-                ->env($env)
-                ->timeout(self::DISPATCH_TIMEOUT_SECONDS)
-                ->forever()
-                ->start([$python, '-m', 'scrapy', 'crawl', $brand->slug]);
+        // Fire-and-forget: we need the spider to keep running after this
+        // artisan command exits. `Process::start()` alone doesn't truly
+        // detach — the child inherits stdio from the parent, so when the
+        // artisan PHP process ends the child gets SIGPIPE on first write
+        // and dies. To get genuine detachment we use the shell pattern
+        // `nohup <cmd> > log 2>&1 &` which redirects all streams to a
+        // per-spider log file and backgrounds the process so it survives.
+        $logDir = storage_path('logs');
+        if (! is_dir($logDir)) {
+            @mkdir($logDir, 0775, true);
+        }
+        $logFile = sprintf(
+            '%s/spider-%s-%s.log',
+            $logDir,
+            $brand->slug,
+            now()->format('Ymd-His'),
+        );
 
-            $pid = $invoked->id();
+        // Build the env prefix for the shell.
+        $envParts = [];
+        foreach ($env as $key => $value) {
+            $envParts[] = sprintf('%s=%s', $key, escapeshellarg($value));
+        }
+        $envPrefix = implode(' ', $envParts);
+
+        $shellCmd = sprintf(
+            'cd %s && %s nohup %s -m scrapy crawl %s > %s 2>&1 & echo $!',
+            escapeshellarg($crawlerPath),
+            $envPrefix,
+            escapeshellarg($python),
+            escapeshellarg($brand->slug),
+            escapeshellarg($logFile),
+        );
+
+        try {
+            // `Process::run` is synchronous but the inner `&` backgrounds
+            // the actual scrapy invocation under the shell. The shell exits
+            // immediately after printing the PID; our `Process` call
+            // returns at that point — fully detached.
+            $result = Process::run(['/bin/sh', '-c', $shellCmd]);
+            $pid = trim($result->output());
+
+            if (! $result->successful() || $pid === '') {
+                throw new \RuntimeException(
+                    'shell wrapper exited non-zero or returned empty pid; stderr: '
+                    . $result->errorOutput(),
+                );
+            }
 
             Log::info('crawler:dispatch started spider', [
                 'slug' => $brand->slug,
-                'pid' => $pid,
+                'pid' => (int) $pid,
                 'triggered_by' => $triggeredBy,
                 'path' => $crawlerPath,
+                'log' => $logFile,
             ]);
 
-            $this->line(sprintf('%-15s started (pid=%s, triggered_by=%s)', $brand->slug, $pid ?? '?', $triggeredBy));
+            $this->line(sprintf(
+                '%-15s started (pid=%s, triggered_by=%s, log=%s)',
+                $brand->slug, $pid, $triggeredBy, $logFile,
+            ));
 
             return 'started';
         } catch (\Throwable $e) {
