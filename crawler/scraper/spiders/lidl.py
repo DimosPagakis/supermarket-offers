@@ -90,7 +90,7 @@ from __future__ import annotations
 
 import os
 import re
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from typing import Any
 from urllib.parse import urlparse
 
@@ -187,7 +187,7 @@ class LidlSpider(scrapy.Spider):
     # --- Step 2: campaign listing -> OfferItems ------------------------------
 
     def parse_listing(self, response: Response) -> Any:
-        scraped_at = datetime.now(timezone.utc)
+        scraped_at = datetime.now(UTC)
         count = 0
         for offer in extract_offers(response.text, scraped_at):
             count += 1

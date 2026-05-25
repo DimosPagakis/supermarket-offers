@@ -7,7 +7,7 @@ captured 2026-05-25 from
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from decimal import Decimal
 from pathlib import Path
 
@@ -17,7 +17,7 @@ from scraper.parsers.masoutis import extract_offers, extract_offers_from_payload
 FIXTURE = (
     Path(__file__).parent / "fixtures" / "masoutis" / "promoitem-page0.json"
 )
-SCRAPED_AT = datetime(2026, 5, 25, 12, 0, 0, tzinfo=timezone.utc)
+SCRAPED_AT = datetime(2026, 5, 25, 12, 0, 0, tzinfo=UTC)
 
 
 def _load_offers() -> list[OfferItem]:

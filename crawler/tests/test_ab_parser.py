@@ -12,7 +12,7 @@ and we recapture the fixture before shipping.
 
 from __future__ import annotations
 
-from datetime import date, datetime, timezone
+from datetime import date, datetime, UTC
 from decimal import Decimal
 from pathlib import Path
 
@@ -22,7 +22,7 @@ from scraper.parsers.ab import extract_offers
 FIXTURE = (
     Path(__file__).parent / "fixtures" / "ab" / "productlist-page0.json"
 )
-SCRAPED_AT = datetime(2026, 5, 25, 12, 0, 0, tzinfo=timezone.utc)
+SCRAPED_AT = datetime(2026, 5, 25, 12, 0, 0, tzinfo=UTC)
 
 
 def _load_offers() -> list[OfferItem]:

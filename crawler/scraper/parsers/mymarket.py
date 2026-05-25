@@ -28,7 +28,8 @@ from __future__ import annotations
 import json
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
-from typing import Any, Iterable
+from typing import Any
+from collections.abc import Iterable
 
 from loguru import logger
 from parsel import Selector

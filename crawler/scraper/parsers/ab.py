@@ -59,7 +59,8 @@ import json
 import re
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
-from typing import Any, Iterable
+from typing import Any
+from collections.abc import Iterable
 
 from loguru import logger
 
@@ -120,7 +121,7 @@ def extract_offers_from_payload(
     classification (the spider does, to surface a histogram in
     ``closed()``).
     """
-    for family, offer in extract_offers_with_family(payload, scraped_at):
+    for _family, offer in extract_offers_with_family(payload, scraped_at):
         if offer is not None:
             yield offer
 

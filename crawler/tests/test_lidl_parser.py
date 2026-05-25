@@ -12,7 +12,7 @@ loudly and we tune the parser before shipping.
 
 from __future__ import annotations
 
-from datetime import date, datetime, timezone
+from datetime import date, datetime, UTC
 from decimal import Decimal
 from pathlib import Path
 
@@ -25,7 +25,7 @@ FIXTURE = Path(__file__).parent / "fixtures" / "lidl" / "listing.html"
 # active offers from ``futurePrices`` to ``currentPrice``. Both fixtures
 # must parse — see ``_pick_price_block`` in scraper/parsers/lidl.py.
 FIXTURE_CURRENT = Path(__file__).parent / "fixtures" / "lidl" / "listing_current.html"
-SCRAPED_AT = datetime(2026, 5, 25, 12, 0, 0, tzinfo=timezone.utc)
+SCRAPED_AT = datetime(2026, 5, 25, 12, 0, 0, tzinfo=UTC)
 
 
 def _load_offers() -> list[OfferItem]:

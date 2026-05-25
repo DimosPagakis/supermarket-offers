@@ -29,7 +29,8 @@ import json
 import logging
 from collections import defaultdict
 from dataclasses import dataclass, field
-from typing import Any, Iterable
+from typing import Any
+from collections.abc import Iterable
 
 from .extractors import ProductFeatures
 from .matcher import match_decision
@@ -312,7 +313,7 @@ def build_groups_with_pairs(
                     show_progress_bar=False,
                 )
                 vectors = np.asarray(vectors, dtype="float32")
-                for pid, vec in zip(ordered_pids, vectors):
+                for pid, vec in zip(ordered_pids, vectors, strict=True):
                     embed_cache[pid] = vec
 
     def _cosine(a: ProductFeatures, b: ProductFeatures) -> float | None:

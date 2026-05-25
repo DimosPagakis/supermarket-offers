@@ -54,7 +54,8 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from collections import Counter
-from typing import Any, Iterable
+from typing import Any
+from collections.abc import Iterable
 
 # Allow `python -m scripts.canonicalise` from the crawler/ root.
 _HERE = os.path.dirname(os.path.abspath(__file__))
@@ -120,8 +121,7 @@ def iter_products(
         qs = urllib.parse.urlencode({"per_page": per_page, "page": page})
         body = _http_get(f"{public_url}/offers?{qs}")
         rows = body.get("data", []) or []
-        for o in rows:
-            yield o
+        yield from rows
         meta = body.get("meta", {}) or {}
         last = meta.get("last_page") or 1
         if page >= last:

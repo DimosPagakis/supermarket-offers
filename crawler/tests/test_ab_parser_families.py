@@ -19,7 +19,7 @@ There are two fixtures:
 from __future__ import annotations
 
 from collections import Counter
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from decimal import Decimal
 from pathlib import Path
 
@@ -37,7 +37,7 @@ from scraper.parsers.ab import (
 
 FIXTURE_FAMILIES = Path(__file__).parent / "fixtures" / "ab" / "productlist-promo-families.json"
 FIXTURE_ALL = Path(__file__).parent / "fixtures" / "ab" / "productlist-all-pages.json"
-SCRAPED_AT = datetime(2026, 5, 25, 12, 0, 0, tzinfo=timezone.utc)
+SCRAPED_AT = datetime(2026, 5, 25, 12, 0, 0, tzinfo=UTC)
 
 
 def _load(path: Path) -> list[tuple[str, OfferItem | None]]:

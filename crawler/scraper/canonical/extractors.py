@@ -421,9 +421,10 @@ _STOPWORDS: frozenset[str] = frozenset({
     # english
     "the", "of", "and", "with", "for", "in", "on", "from", "to", "at",
     "pack", "value", "new",
-    # greek (ASCII-folded forms)
+    # greek (ASCII-folded forms) — "to" is shared with the English set,
+    # so it's listed once above.
     "kai", "me", "se", "sto", "sthn", "stoys", "stis", "toy", "ths", "ton",
-    "twn", "h", "o", "to", "ta", "oi", "oti", "ena", "mia",
+    "twn", "h", "o", "ta", "oi", "oti", "ena", "mia",
     # generic descriptor noise
     "tem", "temaxio", "temaxia", "tmx",
     "fyllo", "fylla", "rolla", "rola", "merides",
@@ -539,8 +540,7 @@ def _format_size(size: tuple[float, str] | None) -> str:
     if float(v).is_integer():
         return f"{int(v)}{u}"
     # avoid trailing zeros — 1.50 → 1.5
-    s = ("%g" % v)
-    return f"{s}{u}"
+    return f"{v:g}{u}"
 
 
 # ---------------------------------------------------------------------------

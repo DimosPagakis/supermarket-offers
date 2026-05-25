@@ -45,7 +45,8 @@ import json
 import re
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
-from typing import Any, Iterable
+from typing import Any
+from collections.abc import Iterable
 
 from loguru import logger
 

@@ -32,7 +32,7 @@ from __future__ import annotations
 
 import asyncio
 import os
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 
 import scrapy
 from loguru import logger
@@ -96,7 +96,7 @@ class SklavenitisSpider(scrapy.Spider):
             )
             return
 
-        scraped_at = datetime.now(timezone.utc)
+        scraped_at = datetime.now(UTC)
         total = 0
 
         async with AsyncSession(impersonate=SKLAVENITIS_IMPERSONATE) as session:
