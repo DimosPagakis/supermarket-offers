@@ -158,8 +158,8 @@ full catalogue into the public `/offers` endpoint:
 | ab          | active, gold standard | classified by `_classify_and_build` family (SHT / BXG% / BXGY / EUROS) |
 | lidl        | active                | `discount.percentageDiscount > 0` / minus-prefixed `discountText` / `oldPrice > price` |
 | masoutis    | active                | `Discount` starts with `-` / `StartPrice > PosPrice` (NOT `OfferDescr` — it's populated on catalogue rows too) |
-| my-market   | active                | `span.diagonal-line` strikethrough OR `.offer-note--percent` pill |
-| sklavenitis | **inactive**          | only `.sign-badges` "N+M Δώρο" badge — too narrow; deferred pending a real flyer URL |
+| my-market   | active                | `span.diagonal-line` strikethrough OR `.offer-note--percent` pill (tolerates up to 8 consecutive empty pages — see spider docstring) |
+| sklavenitis | **inactive**          | Vue SPA — discount overlay rendered client-side post-`ClientContext.Index` hydration; server HTML carries no discount signal. Two re-activation paths in the spider docstring (Playwright or XHR reverse-engineer). |
 
 If a parser is rewritten and the count crashes to near-zero, check
 the per-brand signal column first before assuming selector drift.

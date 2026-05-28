@@ -1,19 +1,13 @@
 """My Market offers-listing spider.
 
 My Market server-side-renders ``/offers`` as a paginated HTML grid —
-no JS required. Each page has 35 product cards (~159 pages = ~5500
+no JS required. Each page has 35 product cards (~161 pages = ~5600
 catalogue items, of which the displayed prices are what shoppers see).
 
-The catalogue on ``/offers`` includes both items currently on
-promotion and items at their regular price (the listing isn't strict
-about that distinction). For the MVP we emit every card as an offer
-record; refining to only-discounted will need either:
-  * a separate badge / strikethrough detector we haven't seen yet, or
-  * an API endpoint that exposes a discount flag.
-
-Either way, the listing view doesn't lie about the displayed price,
-which is what a shopper would pay today — that's the right thing to
-record for an aggregator.
+The catalogue on ``/offers`` mixes promoted SKUs with regular-shelf
+SKUs. The parser gates emit on a real promo signal
+(``span.diagonal-line`` strikethrough or ``.offer-note--percent``
+pill) so only 1–9 cards per page yield. That's correct.
 
 Pagination strategy
 -------------------
@@ -21,9 +15,20 @@ The spider walks **every** page exposed by the storefront. On the
 first page it reads the maximum ``data-mkey="page-N"`` anchor in the
 pagination nav — that's the "go to last page" link a shopper would
 click. Subsequent pages are scheduled in a tight chain until we hit
-that total. As a defence-in-depth fallback, the spider also stops if
-a page returns zero ``.product--teaser`` cards (selector drift or
-catalogue truncation).
+that total.
+
+Empty-page tolerance
+^^^^^^^^^^^^^^^^^^^^
+Discount density is uneven across the catalogue — a given page can
+yield 0 discounted offers and the next page still hold 4–6. The
+original implementation stopped at the *first* zero-yield page,
+which capped real coverage at the first dry-spell (incident
+2026-05-25: full crawl reported 26 offers across 7 pages; live
+sampling of pages 8–10 yielded 1–2 offers each, so the early-stop
+was dropping ~90% of true coverage). We now tolerate
+``MYMARKET_EMPTY_PAGE_RUN`` consecutive empty pages before giving
+up — defaults to 8 so genuine selector drift still terminates a
+run quickly, while normal discount sparsity doesn't.
 
 ``MYMARKET_MAX_PAGES`` is a hard safety cap that protects us from a
 parser bug ever scheduling thousands of requests. It is **not** the
@@ -47,11 +52,16 @@ from scraper.spiders._config import max_pages_from_env
 
 MYMARKET_OFFERS_URL = "https://www.mymarket.gr/offers"
 
-# Safety cap. 159 known pages × 35 items ≈ 5500 catalogue items. The
+# Safety cap. 161 known pages × 35 items ≈ 5600 catalogue items. The
 # *actual* stop condition is the ``total_pages`` value the parser reads
 # from page 1; this constant only kicks in if that detection breaks.
 # Override per-environment with ``CRAWLER_MAX_PAGES_MYMARKET=<N>``.
 MYMARKET_MAX_PAGES = max_pages_from_env("MYMARKET", default=300)
+
+# How many consecutive zero-yield pages we tolerate before assuming
+# the catalogue has been fully walked (or selectors have drifted) and
+# bailing. See the module docstring for why this is 8 rather than 1.
+MYMARKET_EMPTY_PAGE_RUN = 8
 
 
 class MyMarketSpider(scrapy.Spider):
@@ -77,12 +87,13 @@ class MyMarketSpider(scrapy.Spider):
         yield scrapy.Request(
             url=MYMARKET_OFFERS_URL,
             callback=self.parse,
-            meta={"page_number": 1},
+            meta={"page_number": 1, "empty_streak": 0},
         )
 
     def parse(self, response: Response, **kwargs: Any) -> Any:  # type: ignore[override]
         page_number = response.meta.get("page_number", 1)
         total_pages = response.meta.get("total_pages")
+        empty_streak = response.meta.get("empty_streak", 0)
 
         # Only the first page is asked for ``total_pages``; cache it on
         # subsequent requests so we don't re-parse the pagination block.
@@ -114,19 +125,31 @@ class MyMarketSpider(scrapy.Spider):
             yield offer
 
         if count == 0:
-            logger.warning(
-                "my-market: zero cards parsed from {} — selectors / page "
-                "structure may have changed (stopping pagination)",
-                response.url,
+            empty_streak += 1
+            logger.info(
+                "my-market: page {}/{} yielded 0 discounted offers "
+                "(empty_streak={}/{})",
+                page_number,
+                total_pages,
+                empty_streak,
+                MYMARKET_EMPTY_PAGE_RUN,
             )
-            return
-
-        logger.info(
-            "my-market: page {}/{} yielded {} offers",
-            page_number,
-            total_pages,
-            count,
-        )
+            if empty_streak >= MYMARKET_EMPTY_PAGE_RUN:
+                logger.warning(
+                    "my-market: {} consecutive empty pages — stopping. "
+                    "Either the catalogue tail has no more discounts or "
+                    "selectors have drifted.",
+                    empty_streak,
+                )
+                return
+        else:
+            logger.info(
+                "my-market: page {}/{} yielded {} offers",
+                page_number,
+                total_pages,
+                count,
+            )
+            empty_streak = 0
 
         next_page = page_number + 1
         effective_max = min(total_pages, MYMARKET_MAX_PAGES)
@@ -141,5 +164,9 @@ class MyMarketSpider(scrapy.Spider):
         yield scrapy.Request(
             url=f"{MYMARKET_OFFERS_URL}?page={next_page}",
             callback=self.parse,
-            meta={"page_number": next_page, "total_pages": total_pages},
+            meta={
+                "page_number": next_page,
+                "total_pages": total_pages,
+                "empty_streak": empty_streak,
+            },
         )

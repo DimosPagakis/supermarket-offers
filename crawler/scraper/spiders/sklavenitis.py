@@ -61,17 +61,39 @@ SKLAVENITIS_IMPERSONATE = "chrome131"
 class SklavenitisSpider(scrapy.Spider):
     """Yield OfferItems for Sklavenitis ``/sylloges/prosfores`` listings.
 
-    DEFERRED (2026-05-25): the brand is seeded ``active=false``. The
-    configured ``/sylloges/prosfores`` URL is misnamed — it ships the
-    chain's full active catalogue with no per-card discount markup
-    (no strikethrough, no original price, no "-N%" pill). The lone
-    observable per-card promo signal is a ``.sign-badges`` "N+M Δώρο"
-    gift badge present on ~1 in 24 cards. Under the discounted-only
-    emit policy the parser keeps only those cards — a fair correctness
-    win but far too narrow a yield to justify activating the spider.
-    Re-activate this brand (in ``BrandSeeder``) once a real flyer
-    entry point is identified or Sklavenitis adds strikethrough markup
-    to its listing.
+    DEFERRED (2026-05-25, re-confirmed 2026-05-28): the brand is
+    seeded ``active=false``. Root cause is **not** missing flyer
+    markup; the storefront's ``/sylloges/prosfores/`` (and its
+    ``/se-axia/`` "savings in value" and ``/se-eidos/`` "savings in
+    kind" sub-listings) **does** carry per-card discounts at runtime
+    — the yellow ``-0,XX€`` circular badge and crossed-out price a
+    shopper sees in the browser are real. The catch is that the page
+    is a Vue SPA: the server returns a skeleton with only one price
+    per card (``main-price main-price--previous``) and no
+    ``--current``; the discount overlay, strikethrough, and the
+    final shopper-facing price are all rendered client-side after
+    ``/ajax/Atcom.Sites.Yoda.Components.ClientContext.Index`` hydrates
+    the per-user / per-region pricing context. ``curl_cffi`` clears
+    Akamai (we get a 200 with ~720 KB of HTML) but the HTML carries
+    no usable discount signal — zero ``-N,NN€`` strings, zero
+    ``discount`` mentions, zero ``main-price--current`` elements.
+
+    Two re-activation paths, both meaningful work:
+
+      * Swap the spider to scrapy-playwright and wait for the
+        ``ClientContext`` hydration to finish before extracting.
+        Heaviest dep but most resilient to markup churn — we'd just
+        read the post-hydration DOM the shopper sees.
+      * Reverse-engineer the ``ClientContext.Index`` XHR. Lighter
+        runtime but brittle: the payload shape isn't documented and
+        the endpoint is region/cookie-sensitive (it's how the chain
+        delivers loyalty-card pricing). Worth a spike before
+        committing.
+
+    Until either lands, ``BrandSeeder`` keeps Sklavenitis inactive
+    and the dispatcher skips it. The parser, JA3-fingerprint
+    fetcher, and pagination handling here all still work; only the
+    extraction layer has to change.
     """
 
     name = "sklavenitis"
